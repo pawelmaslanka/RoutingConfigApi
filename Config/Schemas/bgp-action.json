@@ -1,0 +1,80 @@
+{
+  "$id": "https://birdconfig.com/api/schemas/bgp-action.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "BGP Action Schema",
+  "description": "BGP Action Schema",
+  "$defs": {
+    "action-body": {
+      "type": "object",
+      "properties": {
+        "action": {
+          "anyOf": [
+            {
+              "oneOf": [
+                {
+                  "type": "string",
+                  "enum": [
+                    "permit",
+                    "deny"
+                  ]
+                },
+                {
+                  "type": "object",
+                  "properties": {
+                    "call-next": {
+                      "$comment": "Allows to specify next rule to be called from the same policy instance. If it is empty then next rule in the list is performed",
+                      "type": "object",
+                      "properties": {
+                        "rule": {
+                          "type": "string"
+                        }
+                      },
+                      "additionalProperties": false
+                    }
+                  },
+                  "additionalProperties": false
+                }
+              ]
+            }
+          ]
+        },
+        "as-path-prepend": {
+          "$ref": "#/$defs/as-path-body-select"
+        },
+        "community-add": {
+          "$ref": "#/$defs/community-body-select"
+        },
+        "community-remove": {
+          "$ref": "#/$defs/community-body-select"
+        },
+        "ext-community-add": {
+          "$ref": "#/$defs/ext-community-body-select"
+        },
+        "ext-community-remove": {
+          "$ref": "#/$defs/ext-community-body-select"
+        },
+        "next-hop-self-set": {
+          "type": "boolean"
+        },
+        "large-community-add": {
+          "$ref": "#/$defs/large-community-body-select"
+        },
+        "large-community-remove": {
+          "$ref": "#/$defs/large-community-body-select"
+        },
+        "local-preference-set": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 4294967295
+        },
+        "med-set": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 4294967295
+        }
+      },
+      "additionalProperties": false,
+      "required": ["action"]
+    }
+  }
+}

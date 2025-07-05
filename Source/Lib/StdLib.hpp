@@ -1,0 +1,36 @@
+/** @copyright Copyright (C) 2025 Pawel Maslanka (pawmas@hotmail.com)
+ *  @license The GNU General Public License v3.0
+ */
+
+#pragma once
+
+// Headers arranged in alphabetical order
+#include <forward_list>
+#include <fstream>
+#include <map>
+#include <memory>
+#include <optional>
+#include <sstream>
+#include <stack>
+#include <string>
+#include <vector>
+
+/** Provides aliases for types from C++ Standard Library */
+namespace StdLib {
+// Aliases arranged in alphabetical order
+using Exception = std::exception;
+using IFStream = std::ifstream;
+using OFStream = std::ofstream;
+using OStrStream = std::ostringstream;
+using String = std::string;
+
+template<class T> using ForwardList = std::forward_list<T>;
+template<class T> using Optional = std::optional<T>;
+template<class T> using SharedPtr = std::shared_ptr<T>;
+template<class T> using Stack = std::stack<T>;
+template<class T> using UniquePtr = std::unique_ptr<T>;
+template<class T> using WeakPtr = std::weak_ptr<T>;
+template<class T> using Vector = std::vector<T>;
+
+template<class Key, class T> using Map = std::map<Key, T>;
+} // namespace StdTypes

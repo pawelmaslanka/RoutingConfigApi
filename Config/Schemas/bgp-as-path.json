@@ -1,0 +1,71 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://example.com/schemas/bgp-as-path.json",
+  "title": "BGP AS PATH Definition",
+  "$defs": {
+    "as-path-body-select": {
+      "oneOf": [
+        {
+          "$ref": "#/$defs/as-path-type"
+        },
+        {
+          "type": "object",
+          "properties": {
+            "as-path-list": {
+              "type": "string"
+            }
+          },
+          "required": ["as-path-list"],
+          "additionalProperties": false
+        },
+        {
+          "$comment": "Allows to define specific implementation regex pattern of BGP AS PATH",
+          "type": "object",
+          "properties": {
+            "pattern": {
+              "type": "string"
+            }
+          },
+          "required": ["pattern"],
+          "additionalProperties": false
+        }
+      ]
+    },
+    "as-path-type": {
+      "type": "array",
+      "items": { "type": "integer", "minimum": 0, "maximum": 65535 }
+    },
+    "as4-path-body-select": {
+      "oneOf": [
+        {
+          "$ref": "#/$defs/as4-path-type"
+        },
+        {
+          "type": "object",
+          "properties": {
+            "as4-path-list": {
+              "type": "string"
+            }
+          },
+          "required": ["as-path-list"],
+          "additionalProperties": false
+        },
+        {
+          "$comment": "Allows to define specific implementation regex pattern of size 4 bytes BGP AS PATH",
+          "type": "object",
+          "properties": {
+            "pattern": {
+              "type": "string"
+            }
+          },
+          "required": ["pattern"],
+          "additionalProperties": false
+        }
+      ]
+    },
+    "as4-path-type": {
+      "type": "array",
+      "items": { "type": "integer", "minimum": 0, "maximum": 4294967295 }
+    }
+  }
+}

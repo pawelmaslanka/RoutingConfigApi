@@ -1,0 +1,209 @@
+{
+  "router-id": "192.0.2.1",
+  "bgp": {
+    "sessions": {
+      "peer1": {
+        "peer": {
+          "address": {
+            "range": "192.0.2.0/29"
+          },
+          "as": "external",
+          "port": 179
+        },
+        "address-family": {
+          "ipv4": {
+            "policy-in": "MAIN-POLICY",
+            "policy-out": "OUT-POLICY"
+          }
+        },
+        "local": {
+          "address": "192.0.2.2",
+          "as": 65000
+        }
+      },
+      "peer2": {
+        "peer": {
+          "address": "192.0.2.3",
+          "as": 65200
+        },
+        "address-family": {
+          "ipv6": {
+            "policy-in": "SUB-POLICY",
+            "policy-out": "OUT-POLICY"
+          }
+        },
+        "local": {
+          "address": "2001:db8:abcd:0012:0000:0000:0000:0001%eth0",
+          "as": 65000
+        }
+      },
+      "peer3": {
+        "peer": {
+          "address": "direct",
+          "as": 65201
+        },
+        "address-family": {
+          "ipv6": {
+            "policy-in": "SUB-POLICY",
+            "policy-out": "OUT-POLICY"
+          }
+        },
+        "local": {
+          "address": "2001:db8:abcd:0012:0000:0000:0000:0001%eth0",
+          "as": 65000
+        }
+      }
+    },
+    "policy-list": {
+      "MAIN-POLICY": {
+        "rule-10": {
+          "seq": 10,
+          "if-match": {
+            "ext-community-eq": {
+              "65000:281474976710655": {}
+            },
+            "net-eq": {
+              "prefix-v4-list": "LOCAL-PREFIXES"
+            },
+            "match-type": "ALL"
+          },
+          "then": {
+            "action": {
+              "call-next": {
+                "rule": "rule-30"
+              }
+            }
+          }
+        },
+        "rule-20": {
+          "seq": 20,
+          "if-match": {
+            "as-path-in": [
+              7000,
+              8000
+            ],
+            "match-type": "ANY"
+          },
+          "then": {
+            "action": "permit",
+            "local-preference-set": 200,
+            "community-add": {
+              "65000:124": {}
+            }
+          }
+        },
+        "rule-30": {
+          "seq": 30,
+          "if-match": {
+            "community-eq": {
+              "65000:200": {},
+              "65001:201": {}
+            },
+            "net-in": {
+              "prefix-v4-list": "LOCAL-PREFIXES"
+            }
+          },
+          "then": {
+            "action": {
+              "call-next": {
+                "rule": "rule-40"
+              }
+            }
+          }
+        },
+        "rule-40": {
+          "seq": 40,
+          "if-match": {
+            "ext-community-in": {
+              "ext-community-list": "EXT-COMMS"
+            },
+            "net-in": {
+              "prefix-v4": {
+                "192.0.2.0/24": {
+                  "le": 32
+                }
+              }
+            }
+          },
+          "then": {
+            "action": "deny"
+          }
+        }
+      },
+      "SUB-POLICY": {
+        "rule-10": {
+          "seq": 10,
+          "if-match": {
+            "community-in": {
+              "65000:100": {},
+              "65001:101": {}
+            }
+          },
+          "then": {
+            "action": "permit",
+            "med-set": 100,
+            "as-path-prepend": [
+              65000,
+              65000
+            ]
+          }
+        }
+      },
+      "OUT-POLICY": {
+        "rule-10": {
+          "seq": 10,
+          "if-match": {
+            "community-in": {
+              "community-list": "TEST_COMMUNITY_LIST"
+            }
+          },
+          "then": {
+            "action": "permit",
+            "next-hop-self-set": true
+          }
+        }
+      }
+    },
+    "prefix-v4-list": {
+      "LOCAL-PREFIXES": {
+        "10.0.0.0/8": {},
+        "192.168.0.0/16": {},
+        "172.168.0.0/18": {
+          "ge": 18,
+          "le": 22
+        },
+        "192.0.2.0/24": {
+          "le": 32
+        }
+      }
+    },
+    "prefix-v6-list": {
+      "LOCAL_PREFIXES_V6": {
+        "2001:db8::/32": {
+          "ge": 32
+        }
+      }
+    },
+    "community-list": {
+      "STANDARD-COMMS": {
+        "65010:1000": {},
+        "65010:2000": {}
+      }
+    },
+    "large-community-list": {
+      "LARGE_COMMS": {
+        "4294967295:4294967295:4294967295": {}
+      }
+    },
+    "as-path-list": {
+      "strict-as-path": [
+        65002
+      ],
+      "external-as-path": [
+        65003,
+        65003,
+        65003
+      ]
+    }
+  }
+}

@@ -1,0 +1,1 @@
+Provides necessary structures for the Composite based Design Pattern.

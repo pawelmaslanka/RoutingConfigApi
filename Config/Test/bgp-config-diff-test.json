@@ -1,0 +1,37 @@
+{
+    "router-id": "192.0.2.1",
+    "local-asn": 65001,
+    "sessions": [
+        {
+            "peer-address": "3001::1",
+            "remote-asn": 64512,
+            "standard-community": [
+                "local-AS",
+                "64512:50"
+            ],
+            "extended-community": [
+                "route-target:64512:100"
+            ],
+            "large-community": [
+                "64512:10:20"
+            ]
+        },
+        {
+            "peer-address": "192.0.2.2",
+            "remote-asn": 65002,
+            "standard-community": [
+                "no-export",
+                "65001:100",
+                123456
+            ],
+            "extended-community": [
+                "target:65001:200",
+                "origin:65001:300"
+            ],
+            "large-community": [
+                "65001:1:1",
+                "65001:100:200"
+            ]
+        }
+    ]
+}
