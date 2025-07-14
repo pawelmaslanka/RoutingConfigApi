@@ -12,7 +12,7 @@
           "type": "object",
           "properties": {
             "as-path-list": {
-              "type": "string"
+              "$ref": "#/$defs/list-name-type"
             }
           },
           "required": ["as-path-list"],
@@ -33,7 +33,9 @@
     },
     "as-path-type": {
       "type": "array",
-      "items": { "type": "integer", "minimum": 0, "maximum": 65535 }
+      "items": { "type": "integer", "minimum": 0, "maximum": 65535 },
+      "additionalProperties": false,
+      "minItems": 1
     },
     "as4-path-body-select": {
       "oneOf": [
@@ -44,7 +46,7 @@
           "type": "object",
           "properties": {
             "as4-path-list": {
-              "type": "string"
+              "$ref": "#/$defs/list-name-type"
             }
           },
           "required": ["as-path-list"],
@@ -65,7 +67,9 @@
     },
     "as4-path-type": {
       "type": "array",
-      "items": { "type": "integer", "minimum": 0, "maximum": 4294967295 }
+      "items": { "type": "integer", "minimum": 0, "maximum": 4294967295 },
+      "additionalProperties": false,
+      "minItems": 1
     }
   }
 }

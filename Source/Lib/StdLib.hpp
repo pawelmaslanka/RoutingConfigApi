@@ -13,6 +13,7 @@
 #include <sstream>
 #include <stack>
 #include <string>
+#include <string_view>
 #include <vector>
 
 /** Provides aliases for types from C++ Standard Library */
@@ -23,6 +24,7 @@ using IFStream = std::ifstream;
 using OFStream = std::ofstream;
 using OStrStream = std::ostringstream;
 using String = std::string;
+using StringView = std::string_view;
 
 template<class T> using ForwardList = std::forward_list<T>;
 template<class T> using Optional = std::optional<T>;

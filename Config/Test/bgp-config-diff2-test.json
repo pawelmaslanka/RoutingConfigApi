@@ -10,8 +10,8 @@
         },
         "address-family": {
           "ipv4": {
-            "policy-in": "MAIN-POLICY",
-            "policy-out": "OUT-POLICY"
+            "policy-in": "MAIN_POLICY",
+            "policy-out": "OUT_POLICY"
           }
         },
         "local": {
@@ -21,12 +21,14 @@
       },
       "peer3": {
         "peer": {
-          "as": 62000
+          "as": 62000,
+          "address": "2001::1"
         },
         "address-family": {
           "ipv6": {
-            "policy-in": "SUB-POLICY",
-            "policy-out": "OUT-POLICY"
+            "next-hop-self": true,
+            "policy-in": "SUB_POLICY",
+            "policy-out": "OUT_POLICY"
           }
         },
         "local": {
@@ -39,23 +41,18 @@
       }
     },
     "policy-list": {
-      "MAIN-POLICY": {
-        "rule-10": {
-          "seq": 10,
+      "MAIN_POLICY": {
+        "term-10": {
           "if-match": {
             "net-in": {
-              "prefix-v4-list": "LOCAL-PREFIXES"
+              "prefix-v4-list": "LOCAL_PREFIXES"
             }
           },
           "then": {
-            "action": {
-              "call-next": {
-              }
-            }
+            "action": "call-next"
           }
         },
-        "rule-20": {
-          "seq": 20,
+        "term-20": {
           "if-match": {
           },
           "then": {
@@ -63,27 +60,21 @@
             "local-preference-set": 200
           }
         },
-        "rule-30": {
-          "seq": 30,
+        "term-30": {
           "if-match": {
-            "community-eq": {
-              "65000:200": {},
-              "65001:201": {}
-            },
+            "community-eq": [
+              "65000:200",
+              "65001:201"
+            ],
             "as-path-in": {
-              "as-path-list": "transit-as-path"
+              "as-path-list": "TRANSIT_AS_PATH"
             }
           },
           "then": {
-            "action": {
-              "call-next": {
-                "rule": "rule-40"
-              }
-            }
+            "action": "call-next"
           }
         },
-        "rule-40": {
-          "seq": 40,
+        "term-40": {
           "if-match": {
             "net-type-eq": "ipv6"
           },
@@ -92,40 +83,37 @@
           }
         }
       },
-      "OUT-POLICY": {
-        "rule-10": {
-          "seq": 10,
+      "OUT_POLICY": {
+        "term-10": {
           "if-match": {
             "as-path-in": [
               300, 100, 200, 200, 200
             ]
           },
           "then": {
-            "action": "permit",
-            "next-hop-self-set": true
+            "action": "permit"
           }
         }
       },
-      "SUB-POLICY": {
-        "rule-10": {
-          "seq": 10,
+      "SUB_POLICY": {
+        "term-10": {
           "if-match": {
             "as-path-eq": {
-              "as-path-list": "strict-as-path"
+              "as-path-list": "STRICT_AS_PATH"
+            },
+            "large-community-eq": {
+              "large-community-list": "LARGE_COMMS"
             }
           },
           "then": {
             "action": "permit",
-            "med-set": 100,
-            "as-path-prepend": {
-              "pattern": "65001..65012"
-            }
+            "med-set": 100
           }
         }
       }
     },
     "prefix-v4-list": {
-      "LOCAL-PREFIXES": {
+      "LOCAL_PREFIXES": {
         "192.168.0.0/16": {},
         "172.168.0.0/18": {
           "ge": 18,
@@ -137,28 +125,28 @@
       }
     },
     "prefix-v6-list": {
-      "LOCAL-PREFIXES": {
+      "LOCAL_PREFIXES": {
         "2001:db8::/31": {
           "ge": 32
         }
       }
     },
     "community-list": {
-      "STANDARD-COMMS": {
-        "65010:1000": {},
-        "65010:2000": {}
-      }
+      "STANDARD_COMMS": [ "65010:2000", "65010:1000" ]
+    },
+    "large-community-list": {
+      "LARGE_COMMS": [ "4294967295:4294967295:4294967295" ]
     },
     "as-path-list": {
-      "transit-as-path": [
+      "TRANSIT_AS_PATH": [
         65001
       ],
-      "strict-as-path": [
+      "STRICT_AS_PATH": [
         65002,
         65002,
         65002
       ],
-      "external-as-path": [
+      "EXTERNAL_AS_PATH": [
         65003
       ]
     }

@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.30)
-project(BirdConfigApi)
+project(BgpConfigApi)
 
 find_package(nlohmann_json_schema_validator REQUIRED)
 

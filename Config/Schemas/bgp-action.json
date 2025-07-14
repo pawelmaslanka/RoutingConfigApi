@@ -13,10 +13,8 @@
               "oneOf": [
                 {
                   "type": "string",
-                  "enum": [
-                    "permit",
-                    "deny"
-                  ]
+                  "enum": [ "call-next", "deny", "permit" ],
+                  "default": "deny"
                 },
                 {
                   "type": "object",
@@ -39,10 +37,33 @@
           ]
         },
         "as-path-prepend": {
-          "$ref": "#/$defs/as-path-body-select"
+          "type": "object",
+          "properties": {
+            "asn": {
+              "type": "integer", "minimum": 0, "maximum": 65535
+            },
+            "n-times": {
+              "type": "integer", "minimum": 1, "maximum": 32
+            }
+          },
+          "additionalProperties": false,
+          "required": [ "asn" ]
         },
         "community-add": {
-          "$ref": "#/$defs/community-body-select"
+          "oneOf": [
+            {
+              "$ref": "#/$defs/community-type"
+            },
+            {
+              "type": "object",
+              "properties": {
+                "community-list": {
+                  "$ref": "#/$defs/list-name-type"
+                }
+              },
+              "additionalProperties": false
+            }
+          ]
         },
         "community-remove": {
           "$ref": "#/$defs/community-body-select"
@@ -53,9 +74,6 @@
         "ext-community-remove": {
           "$ref": "#/$defs/ext-community-body-select"
         },
-        "next-hop-self-set": {
-          "type": "boolean"
-        },
         "large-community-add": {
           "$ref": "#/$defs/large-community-body-select"
         },
@@ -63,14 +81,10 @@
           "$ref": "#/$defs/large-community-body-select"
         },
         "local-preference-set": {
-          "type": "integer",
-          "minimum": 0,
-          "maximum": 4294967295
+          "type": "integer", "minimum": 0, "maximum": 4294967295
         },
         "med-set": {
-          "type": "integer",
-          "minimum": 0,
-          "maximum": 4294967295
+          "type": "integer", "minimum": 0, "maximum": 4294967295
         }
       },
       "additionalProperties": false,

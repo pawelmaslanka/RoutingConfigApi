@@ -12,8 +12,9 @@
         },
         "address-family": {
           "ipv4": {
-            "policy-in": "MAIN-POLICY",
-            "policy-out": "OUT-POLICY"
+            "next-hop-self": true,
+            "policy-in": "MAIN_POLICY",
+            "policy-out": "OUT_POLICY"
           }
         },
         "local": {
@@ -28,8 +29,8 @@
         },
         "address-family": {
           "ipv6": {
-            "policy-in": "SUB-POLICY",
-            "policy-out": "OUT-POLICY"
+            "policy-in": "SUB_POLICY",
+            "policy-out": "OUT_POLICY"
           }
         },
         "local": {
@@ -39,13 +40,13 @@
       },
       "peer3": {
         "peer": {
-          "address": "direct",
+          "address": "2001::2",
           "as": 65201
         },
         "address-family": {
           "ipv6": {
-            "policy-in": "SUB-POLICY",
-            "policy-out": "OUT-POLICY"
+            "policy-in": "SUB_POLICY",
+            "policy-out": "OUT_POLICY"
           }
         },
         "local": {
@@ -55,121 +56,113 @@
       }
     },
     "policy-list": {
-      "MAIN-POLICY": {
-        "rule-10": {
-          "seq": 10,
+      "MAIN_POLICY": {
+        "term-10": {
           "if-match": {
-            "ext-community-eq": {
-              "65000:281474976710655": {}
-            },
+            "ext-community-eq": [ "65535:4294967295:4294967295" ],
             "net-eq": {
-              "prefix-v4-list": "LOCAL-PREFIXES"
+              "prefix-v6": {
+                "2001:db8::/32": {}
+              }
             },
             "match-type": "ALL"
           },
           "then": {
-            "action": {
-              "call-next": {
-                "rule": "rule-30"
-              }
-            }
+            "community-remove": [ "65001:125", "65001:126" ],
+            "action": "call-next"
           }
         },
-        "rule-20": {
-          "seq": 20,
+        "term-20": {
           "if-match": {
-            "as-path-in": [
-              7000,
-              8000
-            ],
+            "as-path-in": [ 7000, 8000 ],
+            "large-community-eq": [ "65535:4294967295:4294967295" ],
+            "net-in": {
+              "prefix-v6": {
+                "::/0": {},
+                "::1/128": {}
+              }
+            },
             "match-type": "ANY"
           },
           "then": {
             "action": "permit",
             "local-preference-set": 200,
-            "community-add": {
-              "65000:124": {}
-            }
+            "community-add": "65000:124"
           }
         },
-        "rule-30": {
-          "seq": 30,
+        "term-30": {
           "if-match": {
-            "community-eq": {
-              "65000:200": {},
-              "65001:201": {}
+            "as-path-eq": {
+              "as-path-list": "STRICT_AS_PATH"
             },
+            "community-eq": [ "65000:200", "65001:201" ],
             "net-in": {
-              "prefix-v4-list": "LOCAL-PREFIXES"
-            }
+              "prefix-v4-list": "LOCAL_PREFIXES"
+            },
+            "match-type": "ANY"
           },
           "then": {
-            "action": {
-              "call-next": {
-                "rule": "rule-40"
-              }
-            }
+            "community-add": {
+              "community-list": "TEST_COMMS"
+            },
+            "as-path-prepend": {
+              "asn": 65000,
+              "n-times": 2
+            },
+            "action": "call-next"
           }
         },
-        "rule-40": {
-          "seq": 40,
+        "term-40": {
           "if-match": {
             "ext-community-in": {
-              "ext-community-list": "EXT-COMMS"
+              "ext-community-list": "EXT_COMMS"
             },
+            "net-type-eq": "ipv4",
             "net-in": {
               "prefix-v4": {
-                "192.0.2.0/24": {
-                  "le": 32
-                }
+                "192.0.2.0/24": { "le": 32 }
               }
-            }
+            },
+            "source-protocol-eq": "BGP"
           },
           "then": {
+            "community-remove": {
+              "community-list": "TEST_COMMS"
+            },
             "action": "deny"
           }
         }
       },
-      "SUB-POLICY": {
-        "rule-10": {
-          "seq": 10,
+      "SUB_POLICY": {
+        "term-10": {
           "if-match": {
-            "community-in": {
-              "65000:100": {},
-              "65001:101": {}
-            }
+            "community-in": [ "65000:100", "65001:101" ]
           },
           "then": {
             "action": "permit",
-            "med-set": 100,
-            "as-path-prepend": [
-              65000,
-              65000
-            ]
+            "med-set": 100
           }
         }
       },
-      "OUT-POLICY": {
-        "rule-10": {
-          "seq": 10,
+      "OUT_POLICY": {
+        "term-10": {
           "if-match": {
             "community-in": {
               "community-list": "TEST_COMMUNITY_LIST"
             }
           },
           "then": {
-            "action": "permit",
-            "next-hop-self-set": true
+            "action": "permit"
           }
         }
       }
     },
     "prefix-v4-list": {
-      "LOCAL-PREFIXES": {
+      "LOCAL_PREFIXES": {
         "10.0.0.0/8": {},
-        "192.168.0.0/16": {},
+        "192.168.0.0/16": { "ge": 20 },
         "172.168.0.0/18": {
-          "ge": 18,
+          "ge": 19,
           "le": 22
         },
         "192.0.2.0/24": {
@@ -185,25 +178,19 @@
       }
     },
     "community-list": {
-      "STANDARD-COMMS": {
-        "65010:1000": {},
-        "65010:2000": {}
-      }
+      "STANDARD_COMMS": [ "65010:1000", "65010:2000" ],
+      "TEST_COMMS": [ "65110:2200" ],
+      "TEST_COMMUNITY_LIST": [ "65010:4000", "65010:3000" ]
+    },
+    "ext-community-list": {
+      "EXT_COMMS": [ "65000:123:456", "65000:123:456" ]
     },
     "large-community-list": {
-      "LARGE_COMMS": {
-        "4294967295:4294967295:4294967295": {}
-      }
+      "LARGE_COMMS": [ "4294967295:4294967295:4294967295" ]
     },
     "as-path-list": {
-      "strict-as-path": [
-        65002
-      ],
-      "external-as-path": [
-        65003,
-        65003,
-        65003
-      ]
+      "STRICT_AS_PATH": [ 65002 ],
+      "EXTERNAL_AS_PATH": [ 65003, 65003, 65003 ]
     }
   }
 }
