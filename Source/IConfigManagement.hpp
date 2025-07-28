@@ -8,5 +8,7 @@ public:
     virtual ~IConfigManagement() = default;
     virtual bool LoadConfig() = 0;
     virtual Optional<ByteStream> SerializeConfig() = 0;
+    virtual Optional<ByteStream> MakeDiff(const ByteStream& otherConfig) = 0;
+    virtual bool ApplyPatch(const ByteStream& patch) = 0;
 }; // class IConfigManagement
 } // namespace Config

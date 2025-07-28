@@ -1,0 +1,4 @@
+Name: subprocess.h
+Version: master
+Source: https://github.com/sheredom/subprocess.h
+About: A simple one header solution to launching processes and interacting with them for C/C++.

@@ -45,6 +45,7 @@ public:
       : mModuleRegistry(moduleRegistry), mLog(moduleRegistry->LoggerRegistry()->Logger(Module::Name::CONFIG_TRANSL)) {}
     virtual ~BirdConfigConverter() = default;
     Optional<ByteStream> Convert(const ByteStream& config) override {
+        mAlreadyTakenListName.clear();
         Json::JSON jConfig;
         try {
             Stack<UniquePtr<ConfigNodeRendering>> configNodes;
@@ -366,7 +367,7 @@ private:
             const auto& pfxIpListSectionStr = pfxIpListSection.str();
             if (pfxIpListSectionStr[pfxIpListSectionStr.size() - 1] == ',') {
                 pfxIpListSection.seekp(-1, std::ios_base::end);
-                pfxIpListSection << '\0'; // NULL terminating string
+                // pfxIpListSection << '\0'; // NULL terminating string
             }
 
             pfxIpListSection << NEW_LINE << "];" << NEW_LINE;
@@ -526,7 +527,7 @@ private:
 
             auto extCommListName = extCommListIt.value().template get<String>();
             if (!extCommListSectionIt->contains(extCommListName)) {
-                mLog->error("Extenmded community list '{}' does not exist", extCommListName);
+                mLog->error("Extended community list '{}' does not exist", extCommListName);
                 return {};
             }
                     
@@ -721,7 +722,7 @@ private:
             const auto& netCheckStmtStr = netCheckStmt.str();
             if (netCheckStmtStr[netCheckStmtStr.size() - 1] == ',') {
                 netCheckStmt.seekp(-1, std::ios_base::end);
-                netCheckStmt << '\0'; // NULL terminating string
+                // netCheckStmt << '\0'; // NULL terminating string
             }
 
             netCheckStmt << "])";
@@ -945,6 +946,37 @@ private:
         return commDelStmt.str();
     }
 
+    Optional<String> RenderNextHopSelfStatement(const Json::JSON& jConfigBgpRoot, const Json::JSON& jConfigParent, const size_t indentSize) {
+        OStrStream nextHopSelfStmt;
+        if (jConfigParent.find(Property::NEXT_HOP_SELF) != jConfigParent.end()) {
+            nextHopSelfStmt << "next hop self ";
+            if (jConfigParent[Property::NEXT_HOP_SELF].template get<bool>()) {
+                nextHopSelfStmt << "on;";
+            }
+            else {
+                nextHopSelfStmt << "off;";
+            }
+        }
+        else if (jConfigBgpRoot.find(Property::IBGP) != jConfigBgpRoot.end()) {
+            if (jConfigBgpRoot[Property::IBGP].find(Property::NEXT_HOP_SELF) != jConfigBgpRoot[Property::IBGP].end()) {
+                nextHopSelfStmt << "next hop self ";
+                if (jConfigBgpRoot[Property::IBGP][Property::NEXT_HOP_SELF].template get<bool>()) {
+                    nextHopSelfStmt << "ibgp;";
+                }
+            }
+        }
+        else if (jConfigBgpRoot.find(Property::EBGP) != jConfigBgpRoot.end()) {
+            if (jConfigBgpRoot[Property::EBGP].find(Property::NEXT_HOP_SELF) != jConfigBgpRoot[Property::EBGP].end()) {
+                nextHopSelfStmt << "next hop self ";
+                if (jConfigBgpRoot[Property::EBGP][Property::NEXT_HOP_SELF].template get<bool>()) {
+                    nextHopSelfStmt << "ebgp;";
+                }
+            }
+        }
+
+        return nextHopSelfStmt.str();
+    }
+
     Optional<String> RenderApplyBgpPolicy(const Json::JSON& jConfigBgpRoot, const Json::JSON& jConfigParent, const size_t indentSize) {
         OStrStream filterStmtOutput;
         auto policyInIt = jConfigParent.find(Property::POLICY_IN);
@@ -1068,33 +1100,55 @@ private:
             configNodes.emplace(std::make_unique<ProtocolBgp>(sessionName));
             birdFullConfig << configNodes.top()->Prolog();
 
-            auto peerIt = sessionDetails.find(Property::PEER);
-            if (peerIt == sessionDetails.end()) {
+            auto propertyIt = sessionDetails.find(Property::PEER);
+            if (propertyIt == sessionDetails.end()) {
                 mLog->error("Not found key '{}' in JSON data", Property::PEER);
                 return {};
             }
             else {
-                birdFullConfig << RenderBgpPeerAddrAsnPort(*bgpIt, peerIt.value(), indent + DEFAULT_INDENT);
+                birdFullConfig << RenderBgpPeerAddrAsnPort(*bgpIt, propertyIt.value(), indent + DEFAULT_INDENT);
             }
 
-            auto localIt = sessionDetails.find(Property::LOCAL);
-            if (localIt == sessionDetails.end()) {
+            propertyIt = sessionDetails.find(Property::LOCAL);
+            if (propertyIt == sessionDetails.end()) {
                 mLog->error("Not found key '{}' in JSON data", Property::LOCAL);
                 return {};
             }
             else {
-                birdFullConfig << RenderBgpLocalAddrAsnPort(*bgpIt, localIt.value(), indent + DEFAULT_INDENT);
+                birdFullConfig << RenderBgpLocalAddrAsnPort(*bgpIt, propertyIt.value(), indent + DEFAULT_INDENT);
             }
 
-            auto addrFamilyIt = sessionDetails.find(Property::ADDRESS_FAMILY);
-            if (addrFamilyIt == sessionDetails.end()) {
+            propertyIt = sessionDetails.find(Property::ADDRESS_FAMILY);
+            if (propertyIt == sessionDetails.end()) {
                 mLog->error("Not found key '{}' in JSON data", Property::ADDRESS_FAMILY);
                 return {};
             }
             else {
-                birdConfigPart = RenderBgpSessionAddrFamily(*bgpIt, addrFamilyIt.value(), indent + DEFAULT_INDENT);
+                birdConfigPart = RenderBgpSessionAddrFamily(*bgpIt, propertyIt.value(), indent + DEFAULT_INDENT);
                 if (!birdConfigPart.has_value()) {
                     mLog->error("Failed to parse '{}' section", Property::ADDRESS_FAMILY);
+                    return {};
+                }
+
+                birdFullConfig << birdConfigPart.value();
+            }
+
+            // This is optional statement
+            if (sessionDetails.find(Property::EBGP) != sessionDetails.end()) {
+                birdConfigPart = RenderBgpMultihopStatement(*bgpIt, sessionDetails[Property::EBGP], indent + DEFAULT_INDENT);
+                if (!birdConfigPart.has_value()) {
+                    mLog->error("Failed to parse '{}' section", Property::EBGP);
+                    return {};
+                }
+
+                birdFullConfig << birdConfigPart.value();
+            }
+
+            // This is optional statement
+            if (sessionDetails.find(Property::IBGP) != sessionDetails.end()) {
+                birdConfigPart = RenderBgpNextHopSelfStatement(*bgpIt, sessionDetails[Property::IBGP], indent + DEFAULT_INDENT);
+                if (!birdConfigPart.has_value()) {
+                    mLog->error("Failed to parse '{}' section", Property::IBGP);
                     return {};
                 }
 
@@ -1375,8 +1429,8 @@ private:
     String RenderBgpPeerAddrAsnPort(const Json::JSON& jConfigBgpRoot, const Json::JSON& jConfigParent, const size_t indentSize) {
         OStrStream peerAttrs;
         bool isDirectlyConnected;
-        auto addrIt = jConfigParent.find(Property::ADDRESS);
-        if (addrIt != jConfigParent.end()) {
+        if (jConfigParent.find(Property::ADDRESS) != jConfigParent.end()) {
+            auto addrIt = jConfigParent.find(Property::ADDRESS);
             auto rangeIt = addrIt->find(Property::RANGE);
             if (rangeIt != addrIt->end()) {
                 peerAttrs << " range " << rangeIt.value().template get<String>();
@@ -1392,6 +1446,20 @@ private:
                 }
             }
         }
+        else if (jConfigParent.find(Property::LINK_LOCAL) != jConfigParent.end()) {
+            auto linkLocalIt = jConfigParent.find(Property::LINK_LOCAL);
+            auto addrIt = linkLocalIt->find(Property::ADDRESS);
+            if (addrIt == linkLocalIt->end()) {
+                mLog->error("Not found key '{}' at property '{}'", Property::ADDRESS, Property::LINK_LOCAL);
+                return {};
+            }
+
+            peerAttrs << " " << addrIt.value().template get<String>();
+            auto ifaceIt = linkLocalIt->find(Property::INTERFACE);
+            if (ifaceIt != linkLocalIt->end()) {
+                peerAttrs << "%" << ifaceIt.value().template get<String>();
+            }
+        }
 
         auto portIt = jConfigParent.find(Property::PORT);
         if (portIt != jConfigParent.end()) {
@@ -1401,7 +1469,7 @@ private:
         auto asnIt = jConfigParent.find(Property::AS);
         if (asnIt != jConfigParent.end()) {
             if (asnIt.value().is_string()) {
-                peerAttrs << " " << asnIt.value().template get<String>();
+                peerAttrs << " " << asnIt.value().template get<String>(); // renders "external" or "internal"
             }
             else {
                 peerAttrs << " as " << std::to_string(asnIt.value().template get<std::uint32_t>());
@@ -1425,9 +1493,18 @@ private:
     String RenderBgpLocalAddrAsnPort(const Json::JSON& jConfigBgpRoot, const Json::JSON& jConfigParent, const size_t indentSize) {
         OStrStream peerAttrs;
         bool isDirectlyConnected;
-        auto addrIt = jConfigParent.find(Property::ADDRESS);
-        if (addrIt != jConfigParent.end()) {
-            peerAttrs << " " << addrIt.value().template get<String>();
+        if (jConfigParent.find(Property::ADDRESS) != jConfigParent.end()) {
+            peerAttrs << " " << jConfigParent[Property::ADDRESS].template get<String>();
+        }
+        else if (jConfigParent.find(Property::LINK_LOCAL) != jConfigParent.end()) {
+            auto linkLocalIt = jConfigParent.find(Property::LINK_LOCAL);
+            if (linkLocalIt->find(Property::ADDRESS) != linkLocalIt->end()) {
+                peerAttrs << " " << (*linkLocalIt)[Property::ADDRESS].template get<String>();
+            }
+
+            if (linkLocalIt->find(Property::INTERFACE) != linkLocalIt->end()) {
+                peerAttrs << "%" << (*linkLocalIt)[Property::INTERFACE].template get<String>();
+            }
         }
 
         auto portIt = jConfigParent.find(Property::PORT);
@@ -1448,29 +1525,83 @@ private:
         return output;
     }
 
+    /** RenderBgpMultihopStatement expects JSON data inside of "ebgp" property/node */
+    String RenderBgpMultihopStatement(const Json::JSON& jConfigBgpRoot, const Json::JSON& jConfigParent, const size_t indentSize) {
+        OStrStream multihopStmt;
+        auto multihopIt = jConfigParent.find(Property::MULTIHOP);
+        if (multihopIt == jConfigParent.end()) {
+            return "";
+        }
+        
+        multihopStmt << String(indentSize, ' ') << "multihop";
+        if (multihopIt->find(Property::TTL) != multihopIt->end()) {
+            multihopStmt << " " << multihopIt->at(Property::TTL).template get<uint16_t>();
+        }
+
+        multihopStmt << ";" << NEW_LINE;
+        return multihopStmt.str();
+    }
+
+    /** RenderBgpNextHopSelfStatement expects JSON data inside of "ibgp" property/node */
+    String RenderBgpNextHopSelfStatement(const Json::JSON& jConfigBgpRoot, const Json::JSON& jConfigParent, const size_t indentSize) {
+        OStrStream nextHopSelfStmt;
+        auto multihopIt = jConfigParent.find(Property::MULTIHOP);
+        if (multihopIt == jConfigParent.end()) {
+            return "";
+        }
+        
+        nextHopSelfStmt << String(indentSize, ' ') << "multihop";
+        if (multihopIt->find(Property::TTL) != multihopIt->end()) {
+            nextHopSelfStmt << " " << multihopIt->at(Property::TTL).template get<uint16_t>();
+        }
+
+        nextHopSelfStmt << ";" << NEW_LINE;
+        return nextHopSelfStmt.str();
+    }
+
     Optional<String> RenderBgpSessionAddrFamily(const Json::JSON& jConfigBgpRoot, const Json::JSON& jConfigParent, const size_t indentSize) {
         OStrStream addrFamilyStmtOutput;
         auto addrFamilyIPv4It = jConfigParent.find("ipv4");
         if (addrFamilyIPv4It != jConfigParent.end()) {
+            addrFamilyStmtOutput << String(indentSize, ' ') << "ipv4 {" << NEW_LINE;
+            auto nextHopSelfStmt = RenderNextHopSelfStatement(jConfigBgpRoot, *addrFamilyIPv4It, indentSize + DEFAULT_INDENT);
+            if (!nextHopSelfStmt.has_value()) {
+                mLog->error("Failed to parse '{}' statement", Property::NEXT_HOP_SELF);
+                return {};
+            }
+
+            if (!nextHopSelfStmt.value().empty()) {
+                addrFamilyStmtOutput << String(indentSize + DEFAULT_INDENT, ' ') << nextHopSelfStmt.value() << NEW_LINE;
+            }
+
             if (addrFamilyIPv4It->contains(Property::POLICY_IN)
                 || addrFamilyIPv4It->contains(Property::POLICY_OUT)) {
                 auto policyStmtOutput = RenderApplyBgpPolicy(jConfigBgpRoot, *addrFamilyIPv4It, indentSize + DEFAULT_INDENT);
                 if (!policyStmtOutput.has_value()) {
-                    mLog->error("Failed to parse policies for '' section", Property::ADDRESS_FAMILY);
+                    mLog->error("Failed to parse policies for '{}' section", Property::ADDRESS_FAMILY);
                     return {};
                 }
 
-                addrFamilyStmtOutput << String(indentSize, ' ') << "ipv4 {" << NEW_LINE;
+                
                 addrFamilyStmtOutput << policyStmtOutput.value();
-                addrFamilyStmtOutput << String(indentSize, ' ') << "};" << NEW_LINE;
             }
-            else {
-                addrFamilyStmtOutput << String(indentSize, ' ') << "ipv4;" << NEW_LINE;
-            }
+
+            addrFamilyStmtOutput << String(indentSize, ' ') << "};" << NEW_LINE;
         }
 
         auto addrFamilyIPv6It = jConfigParent.find("ipv6");
         if (addrFamilyIPv6It != jConfigParent.end()) {
+            addrFamilyStmtOutput << String(indentSize, ' ') << "ipv6 {" << NEW_LINE;
+            auto nextHopSelfStmt = RenderNextHopSelfStatement(jConfigBgpRoot, *addrFamilyIPv6It, indentSize + DEFAULT_INDENT);
+            if (!nextHopSelfStmt.has_value()) {
+                mLog->error("Failed to parse '{}' statement", Property::NEXT_HOP_SELF);
+                return {};
+            }
+
+            if (!nextHopSelfStmt.value().empty()) {
+                addrFamilyStmtOutput << String(indentSize + DEFAULT_INDENT, ' ') << nextHopSelfStmt.value() << NEW_LINE;
+            }
+
             if (addrFamilyIPv6It->contains(Property::POLICY_IN)
                 || addrFamilyIPv6It->contains(Property::POLICY_OUT)) {
                 auto policyStmtOutput = RenderApplyBgpPolicy(jConfigBgpRoot, *addrFamilyIPv6It, indentSize + DEFAULT_INDENT);
@@ -1479,13 +1610,10 @@ private:
                     return {};
                 }
 
-                addrFamilyStmtOutput << String(indentSize, ' ') << "ipv6 {" << NEW_LINE;
                 addrFamilyStmtOutput << policyStmtOutput.value();
-                addrFamilyStmtOutput << String(indentSize, ' ') << "};" << NEW_LINE;
             }
-            else {
-                addrFamilyStmtOutput << String(indentSize, ' ') << "ipv6;" << NEW_LINE;
-            }
+
+            addrFamilyStmtOutput << String(indentSize, ' ') << "};" << NEW_LINE;
         }
 
         auto addrFamilySectionOutput = addrFamilyStmtOutput.str();

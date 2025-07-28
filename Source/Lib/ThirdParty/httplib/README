@@ -1,0 +1,4 @@
+Name: cpp-httplib
+Version: v0.23.1
+Source: https://github.com/yhirose/cpp-httplib
+About: A C++ header-only HTTP/HTTPS server and client library

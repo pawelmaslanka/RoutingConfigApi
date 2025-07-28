@@ -1,0 +1,4 @@
+Name: args
+Version: 6.4.7
+Source: https://github.com/Taywee/args
+About: A simple header-only C++ argument parser library. Supposed to be flexible and powerful, and attempts to be compatible with the functionality of the Python standard argparse library (though not necessarily the API)

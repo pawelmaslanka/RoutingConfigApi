@@ -51,4 +51,17 @@ static String fFindAndReplaceAll(const String& data, String toSearch, String rep
     return copySource;
 }
 
+static Vector<String> fSplitStringByWhitespace(const String& input) {
+    std::regex pattern("\\s+");
+    std::sregex_token_iterator tokensIt(input.begin(), input.end(), pattern, -1);
+    std::sregex_token_iterator end;
+
+    Vector<String> tokens;
+    while (tokensIt != end) {
+        tokens.push_back(*tokensIt++);
+    }
+
+    return tokens;
+}
+
 } // namespace Utils

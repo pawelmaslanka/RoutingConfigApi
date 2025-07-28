@@ -1,0 +1,4 @@
+Name: defer
+Version: master
+Source: https://github.com/mattkretz/defer
+About: Defer a function/lambda until the end of the scope

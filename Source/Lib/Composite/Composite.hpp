@@ -6,7 +6,7 @@
 #include "Node.hpp"
 #include "Visitor.hpp"
 
-#include <Defer.hpp>
+#include <defer/defer.h>
 #include <MultiinheritShared.hpp>
 #include <StdLib.hpp>
 
@@ -76,4 +76,3 @@ private:
     Map<String, SharedPtr<INode> > mNodeByName;
 };
 } // namespace Composite
-

@@ -11,6 +11,7 @@ class JsonConfigManager : public IConfigManagement {
 public:
     explicit JsonConfigManager(SharedPtr<Storage::IDataStorage> dataStorage, const SharedPtr<ModuleRegistry>& moduleRegistry)
       : mDataStorage(dataStorage), mModuleRegistry(moduleRegistry), mLog(moduleRegistry->LoggerRegistry()->Logger(Module::Name::CONFIG_MNGMT)) {}
+    JsonConfigManager(const JsonConfigManager&) = default;
     virtual ~JsonConfigManager() = default;
     bool LoadConfig() override {
         try {
@@ -43,19 +44,19 @@ public:
         return ByteStream(jdata.begin(), jdata.end());
     }
 
-    Optional<ByteStream> MakeDiff(const ByteStream& newConfigData) {
+    Optional<ByteStream> MakeDiff(const ByteStream& otherConfig) override {
         if (!mIsConfigLoaded) {
             mLog->error("JSON config has not been loaded yet");
             return {};
         }
 
-        if (newConfigData.size() == 0) {
+        if (otherConfig.size() == 0) {
             mLog->error("New JSON config to create diff is empty");
             return {};
         }
 
         try {
-            auto jNewConfig = Json::JSON::parse(newConfigData);
+            auto jNewConfig = Json::JSON::parse(otherConfig);
             // Make diff between origin and new config
             auto jDiff = Json::JSON::diff(mJsonConfig, jNewConfig);
             String jData = jDiff.dump();
@@ -67,6 +68,22 @@ public:
         }
 
         return {};
+    }
+
+    bool ApplyPatch(const ByteStream& patch) override {
+        try {
+            auto jPatch = Json::JSON().parse(patch);
+            mJsonConfig.patch_inplace(jPatch);
+            return true;
+        }
+        catch (Exception& ex) {
+            mLog->error("Failed to apply patch due to caught exception. Error: {}", ex.what());
+        }
+        catch (...) {
+            mLog->error("Caught unhandled exception during applying patch");
+        }
+
+        return false;
     }
 
 private:

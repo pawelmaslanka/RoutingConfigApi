@@ -9,11 +9,13 @@
 #include <fstream>
 #include <map>
 #include <memory>
+#include <mutex>
 #include <optional>
 #include <sstream>
 #include <stack>
 #include <string>
 #include <string_view>
+#include <thread>
 #include <vector>
 
 /** Provides aliases for types from C++ Standard Library */
@@ -21,12 +23,15 @@ namespace StdLib {
 // Aliases arranged in alphabetical order
 using Exception = std::exception;
 using IFStream = std::ifstream;
+using Mutex = std::mutex;
 using OFStream = std::ofstream;
 using OStrStream = std::ostringstream;
 using String = std::string;
 using StringView = std::string_view;
+using Thread = std::thread;
 
 template<class T> using ForwardList = std::forward_list<T>;
+template<class T> using LockGuard = std::lock_guard<T>;
 template<class T> using Optional = std::optional<T>;
 template<class T> using SharedPtr = std::shared_ptr<T>;
 template<class T> using Stack = std::stack<T>;
