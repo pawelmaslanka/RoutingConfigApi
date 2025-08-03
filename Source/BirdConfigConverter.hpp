@@ -53,6 +53,15 @@ public:
 
             auto birdConfig = std::make_shared<OStrStream>();
             Optional<String> birdConfigPart;
+
+            birdConfigPart = RenderMiscOptions(jConfig);
+            if (!birdConfigPart.has_value()) {
+                mLog->error("Failed to render misc config options");
+                return {};
+            }
+
+            *birdConfig << birdConfigPart.value();
+
             birdConfigPart = RenderGlobalRouterInfo(jConfig);
             if (!birdConfigPart.has_value()) {
                 mLog->error("Failed to render global info about local router");
@@ -61,9 +70,41 @@ public:
 
             *birdConfig << birdConfigPart.value();
 
+            birdConfigPart = RenderDeviceProtocol(jConfig);
+            if (!birdConfigPart.has_value()) {
+                mLog->error("Failed to render device protocol");
+                return {};
+            }
+
+            *birdConfig << birdConfigPart.value();
+
+            birdConfigPart = RenderKernelProtocol(jConfig);
+            if (!birdConfigPart.has_value()) {
+                mLog->error("Failed to render kernel protocol");
+                return {};
+            }
+
+            *birdConfig << birdConfigPart.value();
+
+            birdConfigPart = RenderDirectProtocol(jConfig);
+            if (!birdConfigPart.has_value()) {
+                mLog->error("Failed to render direct protocol");
+                return {};
+            }
+
+            *birdConfig << birdConfigPart.value();
+
             birdConfigPart = RenderBgpProtocol(jConfig, configNodes);
             if (!birdConfigPart.has_value()) {
                 mLog->error("Failed to render bgp protocol");
+                return {};
+            }
+
+            *birdConfig << birdConfigPart.value();
+
+            birdConfigPart = RenderStaticProtocol(jConfig, configNodes);
+            if (!birdConfigPart.has_value()) {
+                mLog->error("Failed to render static protocol");
                 return {};
             }
 
@@ -112,6 +153,13 @@ private:
         }
 
         return 32;// It's IPv4 prefix
+    }
+
+    Optional<String> RenderMiscOptions(const Json::JSON& jConfig) {
+        OStrStream headerStmt;
+        headerStmt << "log syslog all;" << NEW_LINE;
+        headerStmt << "watchdog warning 5 s;" << NEW_LINE;
+        return headerStmt.str();
     }
 
     /** RenderBgpAsPathListSection expects JSON data inside of "as-path-list" property/node */
@@ -1033,63 +1081,63 @@ private:
             return "";
         }
 
-        OStrStream birdFullConfig;
-        Optional<String> birdConfigPart;
-        birdConfigPart = RenderBgpAsPathListSection(*bgpIt, *bgpIt, 0);
-        if (!birdConfigPart.has_value()) {
+        OStrStream birdBgpFullConfig;
+        Optional<String> birdBgpConfigPart;
+        birdBgpConfigPart = RenderBgpAsPathListSection(*bgpIt, *bgpIt, 0);
+        if (!birdBgpConfigPart.has_value()) {
             mLog->error("Failed to render AS Path list section");
             return {};
         }
 
-        birdFullConfig << birdConfigPart.value() << NEW_LINE;
+        birdBgpFullConfig << birdBgpConfigPart.value() << NEW_LINE;
 
-        birdConfigPart = RenderBgpCommunityListSection(*bgpIt, *bgpIt, 0);
-        if (!birdConfigPart.has_value()) {
+        birdBgpConfigPart = RenderBgpCommunityListSection(*bgpIt, *bgpIt, 0);
+        if (!birdBgpConfigPart.has_value()) {
             mLog->error("Failed to render '{}' section", Property::COMMUNITY_LIST);
             return {};
         }
 
-        birdFullConfig << birdConfigPart.value() << NEW_LINE;
+        birdBgpFullConfig << birdBgpConfigPart.value() << NEW_LINE;
 
-        birdConfigPart = RenderBgpExtCommunityListSection(*bgpIt, *bgpIt, 0);
-        if (!birdConfigPart.has_value()) {
+        birdBgpConfigPart = RenderBgpExtCommunityListSection(*bgpIt, *bgpIt, 0);
+        if (!birdBgpConfigPart.has_value()) {
             mLog->error("Failed to render '{}' section", Property::EXT_COMMUNITY_LIST);
             return {};
         }
 
-        birdFullConfig << birdConfigPart.value() << NEW_LINE;
+        birdBgpFullConfig << birdBgpConfigPart.value() << NEW_LINE;
 
-        birdConfigPart = RenderBgpLargeCommunityListSection(*bgpIt, *bgpIt, 0);
-        if (!birdConfigPart.has_value()) {
+        birdBgpConfigPart = RenderBgpLargeCommunityListSection(*bgpIt, *bgpIt, 0);
+        if (!birdBgpConfigPart.has_value()) {
             mLog->error("Failed to render '{}' section", Property::LARGE_COMMUNITY_LIST);
             return {};
         }
 
-        birdFullConfig << birdConfigPart.value() << NEW_LINE;
+        birdBgpFullConfig << birdBgpConfigPart.value() << NEW_LINE;
 
-        birdConfigPart = RenderBgpPrefixIPv4ListSection(*bgpIt, *bgpIt, 0);
-        if (!birdConfigPart.has_value()) {
+        birdBgpConfigPart = RenderBgpPrefixIPv4ListSection(*bgpIt, *bgpIt, 0);
+        if (!birdBgpConfigPart.has_value()) {
             mLog->error("Failed to render prefix IPv4 list section");
             return {};
         }
 
-        birdFullConfig << birdConfigPart.value() << NEW_LINE;
+        birdBgpFullConfig << birdBgpConfigPart.value() << NEW_LINE;
 
-        birdConfigPart = RenderBgpPrefixIPv6ListSection(*bgpIt, *bgpIt, 0);
-        if (!birdConfigPart.has_value()) {
+        birdBgpConfigPart = RenderBgpPrefixIPv6ListSection(*bgpIt, *bgpIt, 0);
+        if (!birdBgpConfigPart.has_value()) {
             mLog->error("Failed to render prefix IPv6 list section");
             return {};
         }
 
-        birdFullConfig << birdConfigPart.value() << NEW_LINE;
+        birdBgpFullConfig << birdBgpConfigPart.value() << NEW_LINE;
 
-        birdConfigPart = RenderBgpPolicyListSection(*bgpIt, *bgpIt, 0);
-        if (!birdConfigPart.has_value()) {
+        birdBgpConfigPart = RenderBgpPolicyListSection(*bgpIt, *bgpIt, 0);
+        if (!birdBgpConfigPart.has_value()) {
             mLog->error("Failed to render policy list section");
             return {};
         }
 
-        birdFullConfig << birdConfigPart.value() << NEW_LINE;
+        birdBgpFullConfig << birdBgpConfigPart.value() << NEW_LINE;
 
         auto sessionsIt = bgpIt->find(Property::SESSIONS);
         if (sessionsIt == bgpIt->end()) {
@@ -1098,7 +1146,7 @@ private:
 
         for (auto& [sessionName, sessionDetails] : sessionsIt->items()) {
             configNodes.emplace(std::make_unique<ProtocolBgp>(sessionName));
-            birdFullConfig << configNodes.top()->Prolog();
+            birdBgpFullConfig << configNodes.top()->Prolog();
 
             auto propertyIt = sessionDetails.find(Property::PEER);
             if (propertyIt == sessionDetails.end()) {
@@ -1106,7 +1154,7 @@ private:
                 return {};
             }
             else {
-                birdFullConfig << RenderBgpPeerAddrAsnPort(*bgpIt, propertyIt.value(), indent + DEFAULT_INDENT);
+                birdBgpFullConfig << RenderBgpPeerAddrAsnPort(*bgpIt, propertyIt.value(), indent + DEFAULT_INDENT);
             }
 
             propertyIt = sessionDetails.find(Property::LOCAL);
@@ -1115,7 +1163,7 @@ private:
                 return {};
             }
             else {
-                birdFullConfig << RenderBgpLocalAddrAsnPort(*bgpIt, propertyIt.value(), indent + DEFAULT_INDENT);
+                birdBgpFullConfig << RenderBgpLocalAddrAsnPort(*bgpIt, propertyIt.value(), indent + DEFAULT_INDENT);
             }
 
             propertyIt = sessionDetails.find(Property::ADDRESS_FAMILY);
@@ -1124,41 +1172,85 @@ private:
                 return {};
             }
             else {
-                birdConfigPart = RenderBgpSessionAddrFamily(*bgpIt, propertyIt.value(), indent + DEFAULT_INDENT);
-                if (!birdConfigPart.has_value()) {
+                birdBgpConfigPart = RenderBgpSessionAddrFamily(*bgpIt, propertyIt.value(), indent + DEFAULT_INDENT);
+                if (!birdBgpConfigPart.has_value()) {
                     mLog->error("Failed to parse '{}' section", Property::ADDRESS_FAMILY);
                     return {};
                 }
 
-                birdFullConfig << birdConfigPart.value();
+                birdBgpFullConfig << birdBgpConfigPart.value();
             }
 
             // This is optional statement
             if (sessionDetails.find(Property::EBGP) != sessionDetails.end()) {
-                birdConfigPart = RenderBgpMultihopStatement(*bgpIt, sessionDetails[Property::EBGP], indent + DEFAULT_INDENT);
-                if (!birdConfigPart.has_value()) {
+                birdBgpConfigPart = RenderBgpMultihopStatement(*bgpIt, sessionDetails[Property::EBGP], indent + DEFAULT_INDENT);
+                if (!birdBgpConfigPart.has_value()) {
                     mLog->error("Failed to parse '{}' section", Property::EBGP);
                     return {};
                 }
 
-                birdFullConfig << birdConfigPart.value();
+                birdBgpFullConfig << birdBgpConfigPart.value();
             }
 
             // This is optional statement
             if (sessionDetails.find(Property::IBGP) != sessionDetails.end()) {
-                birdConfigPart = RenderBgpNextHopSelfStatement(*bgpIt, sessionDetails[Property::IBGP], indent + DEFAULT_INDENT);
-                if (!birdConfigPart.has_value()) {
+                birdBgpConfigPart = RenderBgpNextHopSelfStatement(*bgpIt, sessionDetails[Property::IBGP], indent + DEFAULT_INDENT);
+                if (!birdBgpConfigPart.has_value()) {
                     mLog->error("Failed to parse '{}' section", Property::IBGP);
                     return {};
                 }
 
-                birdFullConfig << birdConfigPart.value();
+                birdBgpFullConfig << birdBgpConfigPart.value();
             }
 
-            birdFullConfig << configNodes.top()->Epilog();
+            birdBgpFullConfig << configNodes.top()->Epilog();
         }
 
-        return birdFullConfig.str();
+        return birdBgpFullConfig.str();
+    }
+
+    Optional<String> RenderDeviceProtocol(const Json::JSON& jConfig) {
+        const size_t indent = 0;
+        OStrStream deviceProtocolSection;
+        deviceProtocolSection << "protocol device {" << NEW_LINE;
+        deviceProtocolSection << String(DEFAULT_INDENT, ' ') << "scan time 10;" << NEW_LINE;
+        deviceProtocolSection << String(DEFAULT_INDENT, ' ') << "interface \"*\";" << NEW_LINE;
+        deviceProtocolSection << "}" << NEW_LINE;
+        return deviceProtocolSection.str();
+    }
+
+    Optional<String> RenderDirectProtocol(const Json::JSON& jConfig) {
+        const size_t indent = 0;
+        OStrStream deviceProtocolSection;
+        deviceProtocolSection << "protocol direct {" << NEW_LINE;
+        deviceProtocolSection << String(DEFAULT_INDENT, ' ') << "ipv4;" << NEW_LINE;
+        deviceProtocolSection << String(DEFAULT_INDENT, ' ') << "ipv6;" << NEW_LINE;
+        deviceProtocolSection << String(DEFAULT_INDENT, ' ') << "interface \"*\";" << NEW_LINE;
+        deviceProtocolSection << "}" << NEW_LINE;
+        return deviceProtocolSection.str();
+    }
+
+    Optional<String> RenderKernelProtocol(const Json::JSON& jConfig) {
+        const size_t indent = 0;
+        OStrStream kernelProtocolSection;
+        kernelProtocolSection << "protocol kernel 'KERNEL_IPv4' {" << NEW_LINE;
+        kernelProtocolSection << String(DEFAULT_INDENT, ' ') << "scan time 5;" << NEW_LINE;
+        kernelProtocolSection << String(DEFAULT_INDENT, ' ') << "ipv4 {" << NEW_LINE;
+        kernelProtocolSection << String(2 * DEFAULT_INDENT, ' ') << "export all;" << NEW_LINE;
+        kernelProtocolSection << String(2 * DEFAULT_INDENT, ' ') << "import all;" << NEW_LINE;
+        kernelProtocolSection << String(DEFAULT_INDENT, ' ') << "};" << NEW_LINE;
+        kernelProtocolSection << String(DEFAULT_INDENT, ' ') << "merge paths on limit 128;" << NEW_LINE;
+        kernelProtocolSection << "}" << NEW_LINE;
+
+        kernelProtocolSection << "protocol kernel 'KERNEL_IPv6' {" << NEW_LINE;
+        kernelProtocolSection << String(DEFAULT_INDENT, ' ') << "ipv6 {" << NEW_LINE;
+        kernelProtocolSection << String(2 * DEFAULT_INDENT, ' ') << "export all;" << NEW_LINE;
+        kernelProtocolSection << String(2 * DEFAULT_INDENT, ' ') << "import all;" << NEW_LINE;
+        kernelProtocolSection << String(DEFAULT_INDENT, ' ') << "};" << NEW_LINE;
+        kernelProtocolSection << String(DEFAULT_INDENT, ' ') << "merge paths on limit 128;" << NEW_LINE;
+        kernelProtocolSection << "}" << NEW_LINE;
+
+        return kernelProtocolSection.str();
     }
 
     /** RenderBgpPolicyIfStatement expects JSON data inside of "if-match" property/node */
@@ -1561,7 +1653,7 @@ private:
 
     Optional<String> RenderBgpSessionAddrFamily(const Json::JSON& jConfigBgpRoot, const Json::JSON& jConfigParent, const size_t indentSize) {
         OStrStream addrFamilyStmtOutput;
-        auto addrFamilyIPv4It = jConfigParent.find("ipv4");
+        auto addrFamilyIPv4It = jConfigParent.find(Property::IPV4);
         if (addrFamilyIPv4It != jConfigParent.end()) {
             addrFamilyStmtOutput << String(indentSize, ' ') << "ipv4 {" << NEW_LINE;
             auto nextHopSelfStmt = RenderNextHopSelfStatement(jConfigBgpRoot, *addrFamilyIPv4It, indentSize + DEFAULT_INDENT);
@@ -1589,7 +1681,7 @@ private:
             addrFamilyStmtOutput << String(indentSize, ' ') << "};" << NEW_LINE;
         }
 
-        auto addrFamilyIPv6It = jConfigParent.find("ipv6");
+        auto addrFamilyIPv6It = jConfigParent.find(Property::IPV6);
         if (addrFamilyIPv6It != jConfigParent.end()) {
             addrFamilyStmtOutput << String(indentSize, ' ') << "ipv6 {" << NEW_LINE;
             auto nextHopSelfStmt = RenderNextHopSelfStatement(jConfigBgpRoot, *addrFamilyIPv6It, indentSize + DEFAULT_INDENT);
@@ -1623,6 +1715,119 @@ private:
         }
 
         return addrFamilySectionOutput;
+    }
+
+    Optional<String> RenderStaticProtocol(const Json::JSON& jConfig, Stack<UniquePtr<ConfigNodeRendering>>& configNodes) {
+        const size_t indent = 0;
+        auto staticIt = jConfig.find(Property::STATIC);
+        if (staticIt == jConfig.end()) {
+            return "";
+        }
+
+        auto routeIt = staticIt->find(Property::ROUTE);
+        if (routeIt == staticIt->end()) {
+            return "";
+        }
+
+        OStrStream birdStaticFullConfig;
+        Optional<String> birdStaticConfigPart;
+
+        if (routeIt->find(Property::IPV4) != routeIt->end()) {
+            birdStaticFullConfig << "protocol static 'STATIC_IPv4' {" << NEW_LINE;
+            birdStaticConfigPart = RenderStaticIpRouteSectionBody(Property::IPV4, routeIt->at(Property::IPV4), indent + DEFAULT_INDENT);
+            if (!birdStaticConfigPart.has_value()) {
+                mLog->error("Failed to render static IPv4 route section");
+                return {};
+            }
+
+            birdStaticFullConfig << birdStaticConfigPart.value();
+            birdStaticFullConfig << "}" << NEW_LINE;
+        }
+
+        if (routeIt->find(Property::IPV6) != routeIt->end()) {
+            birdStaticFullConfig << "protocol static 'STATIC_IPv6' {" << NEW_LINE;
+            birdStaticConfigPart = RenderStaticIpRouteSectionBody(Property::IPV6, routeIt->at(Property::IPV6), indent + DEFAULT_INDENT);
+            if (!birdStaticConfigPart.has_value()) {
+                mLog->error("Failed to render static IPv6 route section");
+                return {};
+            }
+
+            birdStaticFullConfig << birdStaticConfigPart.value();
+            birdStaticFullConfig << "}" << NEW_LINE;
+        }
+
+        return birdStaticFullConfig.str();
+    }
+
+    Optional<String> RenderStaticIpRouteSectionBody(const String& ipChannel, const Json::JSON& jConfigIpRouteList, const size_t indentSize) {
+        OStrStream sectionBody;
+        sectionBody << String(indentSize, ' ') << ipChannel << ";" << NEW_LINE;
+        auto routeList = RenderStaticRouteStatement(jConfigIpRouteList, indentSize);
+        if (!routeList.has_value()) {
+            mLog->error("Failed to render list of {} routes", ipChannel);
+            return {};
+        }
+
+        sectionBody << routeList.value();
+        return sectionBody.str();
+    }
+
+    Optional<String> RenderStaticRouteStatement(const Json::JSON& jConfigParent, const size_t indentSize) {
+        OStrStream routeStmt;
+        for (const auto& [prefix, attrs] : jConfigParent.items()) {
+            routeStmt << String(indentSize, ' ') << "route " << prefix;
+            if (attrs.find(Property::NEXT_HOP) != attrs.end()) {
+                auto nexthopStmt = RenderStaticRouteNexthopStatement(attrs[Property::NEXT_HOP], indentSize);
+                if (!nexthopStmt.has_value()) {
+                    mLog->error("Failed to render nexthop of prefix '{}'", prefix);
+                    return {};
+                }
+
+                routeStmt << nexthopStmt.value() << ";" << NEW_LINE;
+            }
+            else if (attrs.find(Property::IFNAME) != attrs.end()) {
+                routeStmt << " via \"" << attrs[Property::IFNAME].template get<String>() << "\";" << NEW_LINE;
+            }
+            else {
+                mLog->error("There is missing static route '{}' attributes", prefix);
+                return {};
+            }
+        }
+
+        return routeStmt.str();
+    }
+
+    Optional<String> RenderStaticRouteNexthopStatement(const Json::JSON& jConfigNexthop, const size_t indentSize) {
+        OStrStream nexthopStmt;
+        if (jConfigNexthop.is_string()) {
+            // The route is "blackholed" or "unrechabled"
+            nexthopStmt << " " << jConfigNexthop.template get<String>();
+            return nexthopStmt.str();
+        }
+
+        for (const auto& [nexthop, attrs] : jConfigNexthop.items()) {
+            if (!nexthopStmt.str().empty()) {
+                nexthopStmt << NEW_LINE << String(indentSize + DEFAULT_INDENT, ' ');
+            }
+
+            nexthopStmt << " via " << nexthop;
+            if (attrs.find(Property::IFNAME) != attrs.end()) {
+                nexthopStmt << " dev \"" << attrs[Property::IFNAME].template get<String>() << "\"";
+            }
+
+            if (attrs.find(Property::ONLINK) != attrs.end()) {
+                if (attrs[Property::ONLINK].template get<bool>()) {
+                    nexthopStmt << " " << "onlink";
+                }
+            }
+        }
+
+        if (nexthopStmt.str().empty()) {
+            mLog->error("There is missing nexthop");
+            return {};
+        }
+
+        return nexthopStmt.str();
     }
 
 }; // class BirdConfigConverter

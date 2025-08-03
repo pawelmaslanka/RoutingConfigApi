@@ -406,9 +406,7 @@
                           "$ref": "#/$defs/ipv6-link-local-addr-type"
                         },
                         "interface": {
-                          "description": "Linux based allowed interface name",
-                          "type": "string",
-                          "pattern": "^[^\\s/]{1,15}$"
+                          "$ref": "#/$defs/interface-type"
                         }
                       },
                       "additionalProperties": false,

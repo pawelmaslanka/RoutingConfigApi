@@ -258,5 +258,58 @@
       "STRICT_AS_PATH": [ 65002 ],
       "EXTERNAL_AS_PATH": [ 65003, 65003, 65003 ]
     }
+  },
+  "static": {
+    "route": {
+      "ipv4": {
+        "10.10.10.0/24": {
+          "next-hop": "blackhole"
+        },
+        "1.1.1.0/24": {
+          "next-hop": {
+            "1.1.2.1":{}
+          }
+        },
+        "2.2.2.0/24": {
+          "ifname": "eth0"
+        },
+        "3.3.3.0/24": {
+          "next-hop": {
+            "1.1.2.1": {
+              "ifname": "eth0",
+              "onlink": true
+            }
+          }
+        },
+        "33.33.33.0/24": {
+          "next-hop": {
+            "1.1.2.1": {
+              "ifname": "eth0",
+              "onlink": true
+            }
+          }
+        },
+        "4.4.4.0/24": {
+          "next-hop": {
+            "1.1.2.1": {
+              "ifname": "eth0",
+              "onlink": true
+            },
+            "2.2.2.1": {
+              "ifname": "eth0",
+              "onlink": true
+            }
+          }
+        }
+      },
+      "ipv6": {
+        "2001:db8::/32": {
+          "next-hop": {
+            "1.1.2.1": {},
+            "2.2.2.1": {}
+          }
+        }
+      }
+    }
   }
 }
