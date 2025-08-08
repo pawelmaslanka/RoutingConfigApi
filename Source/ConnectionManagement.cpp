@@ -28,8 +28,8 @@ bool Client::post(const String& host_addr, const String& path, const String& bod
     return true;
 }
 
-Server::Server()
-: _session_mngr(360s /* session timeout */) {
+Server::Server(Std::SharedPtr<ModuleRegistry>& module_registry)
+: _session_mngr(360s /* session timeout */, module_registry), _module_registry(module_registry), _log(module_registry->LoggerRegistry()->Logger(Module::Name::CONN_MNGMT)) {
     _session_mngr.RegisterSessionTimeoutCallback(_callback_register_id, [this](const String session_token) {
         _session_mngr.RemoveSessionToken(session_token);
         // NOTE: This is ugly way (hack?) to discard pending candidate changes. It should be consider to bind the following callbacks with session's token
@@ -38,7 +38,7 @@ Server::Server()
             path = ConnectionManagement::URIRequestPath::Config::CANDIDATE;
             auto status_code = cb(path, request_data, return_data);
             if (status_code != HTTP::StatusCode::OK) {
-                spdlog::error("Failed to discard pending candidate changes due to expired session's token");
+                _log->error("Failed to discard pending candidate changes due to expired session's token");
             }
         }
     });
@@ -126,16 +126,16 @@ bool Server::Run(const String& host, const uint16_t port) {
         }
     });
 
-    srv.Post(ConnectionManagement::URIRequestPath::Config::RUNNING_DIFF, [this](const Http::Request &req, Http::Response &res) {
+    srv.Get(ConnectionManagement::URIRequestPath::Config::RUNNING_DIFF, [this](const Http::Request &req, Http::Response &res) {
         String return_data;
-        res.status = processRequest(HTTP::Method::POST, ConnectionManagement::URIRequestPath::Config::RUNNING_DIFF, req.body, return_data);
+        res.status = processRequest(HTTP::Method::GET, ConnectionManagement::URIRequestPath::Config::RUNNING_DIFF, req.body, return_data);
         auto return_message = HTTP::IsSuccess((HTTP::StatusCode) res.status) ? return_data : "Failed";
         res.set_content(return_message, HTTP::ContentType::TEXT_PLAIN_RESP_CONTENT);
     });
 
     srv.Get(ConnectionManagement::URIRequestPath::Config::CANDIDATE, [this](const Http::Request &req, Http::Response &res) {
         if (!_session_mngr.CheckActiveSessionToken(req, res)) {
-            spdlog::info("There is not active session to get candidate config");
+            _log->info("There is not active session to get candidate config");
             return;
         }
 
@@ -169,7 +169,20 @@ bool Server::Run(const String& host, const uint16_t port) {
         res.set_content(return_message, HTTP::ContentType::TEXT_PLAIN_RESP_CONTENT);
     });
 
-    spdlog::info("Started listening on {}:{}", host, port);
+    srv.Get(ConnectionManagement::URIRequestPath::Log::LAST_REQUEST, [this](const Http::Request &req, Http::Response &res) {
+        // if (!_session_mngr.CheckActiveSessionToken(req, res)) {
+        //     _log->info("There is not active session to get last request log message");
+        //     return;
+        // }
+
+        String return_data;
+        auto status = processRequest(HTTP::Method::GET, ConnectionManagement::URIRequestPath::Log::LAST_REQUEST, req.body, return_data);
+        auto return_message = status ? return_data : "Failed";
+        res.set_content(return_message, HTTP::ContentType::TEXT_PLAIN_RESP_CONTENT);
+        res.status = status ? HTTP::StatusCode::OK : HTTP::StatusCode::INTERNAL_SERVER_ERROR;
+    });
+
+    _log->info("Started listening on {}:{}", host, port);
     return srv.listen(host, port);;
 }
 
@@ -231,7 +244,7 @@ HTTP::StatusCode Server::processRequest(const HTTP::Method method, const String&
         break;
     }
     default: {
-        spdlog::error("Unsupported HTTP method request");
+        _log->error("Unsupported HTTP method request");
     }
     }
 

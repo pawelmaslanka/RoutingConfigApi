@@ -17,11 +17,11 @@ else
 fi
 
 echo "Get diff of valid config - change router-id"
-curl -s -X POST http://localhost:8001/config/running/diff \
+JSON_DIFF_OUTPUT=`curl -s -X GET http://localhost:8001/config/running/diff \
    -H 'Content-Type: application/json' \
    -d '
 {
-  "router-id": "192.0.2.1",
+  "router-id": "127.0.0.1",
   "bgp": {
     "sessions": {
       "peer1": {
@@ -42,7 +42,8 @@ curl -s -X POST http://localhost:8001/config/running/diff \
         "local": {
           "address": "192.0.2.2",
           "as": 65000
-        }
+        },
+        "ibgp": {}
       },
       "peer2": {
         "peer": {
@@ -56,9 +57,10 @@ curl -s -X POST http://localhost:8001/config/running/diff \
           }
         },
         "local": {
-          "address": "2001:db8:abcd:0012:0000:0000:0000:0001%eth0",
+          "address": "2001:db8:abcd:0012:0000:0000:0000:0001",
           "as": 65000
-        }
+        },
+        "ibgp": {}
       },
       "peer3": {
         "peer": {
@@ -75,8 +77,69 @@ curl -s -X POST http://localhost:8001/config/running/diff \
           }
         },
         "local": {
-          "address": "2001:db8:abcd:0012:0000:0000:0000:0001%eth0",
+          "address": "2001:db8:abcd:0012:0000:0000:0000:0001",
           "as": 65000
+        },
+        "ibgp": {}
+      },
+      "peer4": {
+        "peer": {
+          "address": "2001::1",
+          "as": 65201
+        },
+        "address-family": {
+          "ipv6": {
+            "policy-in": "SUB_POLICY",
+            "policy-out": "OUT_POLICY"
+          }
+        },
+        "local": {
+          "address": "2001:db8:abcd:0012:0000:0000:0000:0001",
+          "as": 65000
+        },
+        "ebgp": {
+          "multihop": {
+            "ttl": 4
+          }
+        }
+      },
+      "peer5": {
+        "peer": {
+          "link-local": {
+            "address": "fe80::1",
+            "interface": "eth0"
+          },
+          "as": 65201
+        },
+        "address-family": {
+          "ipv6": {
+            "policy-in": "SUB_POLICY",
+            "policy-out": "OUT_POLICY"
+          }
+        },
+        "local": {
+          "address": "2001:db8:abcd:0012:0000:0000:0000:0001",
+          "as": 65000
+        },
+        "ibgp": {}
+      },
+      "peer6": {
+        "peer": {
+          "address": "3001::2",
+          "as": 65201
+        },
+        "address-family": {
+          "ipv6": {
+            "policy-in": "SUB_POLICY",
+            "policy-out": "OUT_POLICY"
+          }
+        },
+        "local": {
+          "address": "2001:db8:abcd:0012:0000:0000:0000:0001",
+          "as": 65000
+        },
+        "ebgp": {
+          "multihop": {}
         }
       }
     },
@@ -217,8 +280,81 @@ curl -s -X POST http://localhost:8001/config/running/diff \
       "STRICT_AS_PATH": [ 65002 ],
       "EXTERNAL_AS_PATH": [ 65003, 65003, 65003 ]
     }
+  },
+  "static": {
+    "route": {
+      "ipv4": {
+        "10.10.10.0/24": {
+          "next-hop": "blackhole"
+        },
+        "1.1.1.0/24": {
+          "next-hop": {
+            "1.1.2.1":{}
+          }
+        },
+        "2.2.2.0/24": {
+          "ifname": "eth0"
+        },
+        "3.3.3.0/24": {
+          "next-hop": {
+            "1.1.2.1": {
+              "ifname": "eth0",
+              "onlink": true
+            }
+          }
+        },
+        "33.33.33.0/24": {
+          "next-hop": {
+            "1.1.2.1": {
+              "ifname": "eth0",
+              "onlink": true
+            }
+          }
+        },
+        "4.4.4.0/24": {
+          "next-hop": {
+            "1.1.2.1": {
+              "ifname": "eth0",
+              "onlink": true
+            },
+            "2.2.2.1": {
+              "ifname": "eth0",
+              "onlink": true
+            }
+          }
+        }
+      },
+      "ipv6": {
+        "2001:db8::/32": {
+          "next-hop": {
+            "1.1.2.1": {},
+            "2.2.2.1": {}
+          }
+        }
+      }
+    }
   }
-}' | jq
+}' | jq`
+
+JSON_DIFF_EXPECTED='[
+  {
+    "op": "replace",
+    "path": "/router-id",
+    "value": "127.0.0.1"
+  }
+]'
+
+JSON_DIFF_EXPECTED=`echo $JSON_DIFF_EXPECTED | jq "."`
+
+if test "${JSON_DIFF_OUTPUT}" = "${JSON_DIFF_EXPECTED}"; then
+    echo "Successfully received expected JSON diff"
+else
+    echo "Unexpected JSON diff"
+    echo "Received:"
+    echo "${JSON_DIFF_OUTPUT}"
+    echo "Expected:"
+    echo "${JSON_DIFF_EXPECTED}"
+fi
 
 echo "Post update good config without session token"
 HTTP_STATUS=`curl -s -o /dev/null -w "%{http_code}" -X POST http://localhost:8001/config/running/update \
@@ -260,6 +396,10 @@ else
     echo "Failed to process the request (${HTTP_STATUS})"
     exit 1
 fi
+
+echo "Get last request log"
+curl -s -X GET http://localhost:8001/log/last \
+   -H 'Content-Type: application/json'
 
 echo "Post update good config [1]"
 HTTP_STATUS=`curl -s -o /dev/null -w "%{http_code}" -X POST http://localhost:8001/config/running/update \

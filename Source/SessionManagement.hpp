@@ -5,7 +5,10 @@
  */
 #pragma once
 
+#include "Lib/ModuleRegistry.hpp"
 #include "Lib/StdLib.hpp"
+#include "Modules.hpp"
+
 #include <httplib/httplib.h>
 
 namespace Http = httplib;
@@ -21,7 +24,7 @@ using SessionTokenTimerCB = std::function<void(const Std::String session_token)>
 */
 class SessionManager {
 public:
-    SessionManager(const std::chrono::seconds session_timeout_sec);
+    explicit SessionManager(const std::chrono::seconds session_timeout_sec, Std::SharedPtr<ModuleRegistry>& module_registry);
     ~SessionManager();
 
     bool RegisterSessionToken(const Http::Request &req, Http::Response &res);
@@ -64,4 +67,6 @@ private:
     };
     Std::Map<Std::String, TimerThreadDetails> _session_token_timers;
     Std::Mutex _session_token_timers_mutex;
+    const Std::SharedPtr<ModuleRegistry> _module_registry;
+    Std::SharedPtr<Log::SpdLogger> _log;
 };

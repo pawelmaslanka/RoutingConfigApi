@@ -14,12 +14,12 @@
 using namespace std::chrono_literals;
 using namespace StdLib;
 
-SessionManager::SessionManager(const std::chrono::seconds session_timeout_sec)
+SessionManager::SessionManager(const std::chrono::seconds session_timeout_sec, Std::SharedPtr<ModuleRegistry>& module_registry)
 : _session_timeout_sec { session_timeout_sec },
   _checking_session_expiration_thread { [this]() {
         for (;;) {
             if (_checking_session_expiration_quit_flag) {
-                spdlog::info("Requested to stop checking session expiration");
+                _log->info("Requested to stop checking session expiration");
                 return;
             }
 
@@ -76,7 +76,8 @@ SessionManager::SessionManager(const std::chrono::seconds session_timeout_sec)
 
             std::this_thread::sleep_for(10s);
         }
-    } } {
+    } },
+    _module_registry(module_registry), _log(module_registry->LoggerRegistry()->Logger(Module::Name::SESSION_MNGMT)) {
     _checking_session_expiration_thread.detach();
 }
 
@@ -93,15 +94,15 @@ bool SessionManager::RegisterSessionToken(const Http::Request &req, Http::Respon
 
     auto now = std::chrono::system_clock::now();
     _leased_session_tokens[req.body] = SessionDetails { now, now };
-    spdlog::info("Registered new session token '{}'", req.body);
-    res.status =  HTTP::StatusCode::CREATED;
+    _log->info("Registered new session token '{}'", req.body);
+    res.status = HTTP::StatusCode::CREATED;
     return true;
 }
 
 bool SessionManager::CheckSessionToken(const Http::Request &req, Http::Response &res) {
     LockGuard<Mutex> _(_session_token_mutex);
     if (req.headers.find(HTTP::Header::Tokens::AUTHORIZATION) == req.headers.end()) {
-        spdlog::info("Not found authorization token");
+        _log->error("Not found authorization token");
         res.status = HTTP::StatusCode::TOKEN_REQUIRED;
         return false;
     }
@@ -111,13 +112,13 @@ bool SessionManager::CheckSessionToken(const Http::Request &req, Http::Response 
     // Authorization: Bearer TOKEN
     String session_token = auth.substr(std::strlen(HTTP::Header::Tokens::BEARER) + 1);
     if (_leased_session_tokens.find(session_token) == _leased_session_tokens.end()) {
-        spdlog::info("Not found session '{}'", session_token);
+        _log->error("Not found session '{}'", session_token);
         res.status = HTTP::StatusCode::INVALID_TOKEN;
         return false;
     }
 
     _leased_session_tokens[session_token].LastRequestAt = std::chrono::system_clock::now();
-    res.status =  HTTP::StatusCode::OK;
+    res.status = HTTP::StatusCode::OK;
     return true;
 };
 
@@ -138,14 +139,14 @@ bool SessionManager::SetActiveSessionToken(const Http::Request &req, Http::Respo
     }
 
     _active_session_token = session_token;
-    res.status =  HTTP::StatusCode::OK;
+    res.status = HTTP::StatusCode::OK;
     return true;
 };
 
 bool SessionManager::CheckActiveSessionToken(const Http::Request &req, Http::Response &res) {
     LockGuard<Mutex> _(_session_token_mutex);
     if (req.headers.find(HTTP::Header::Tokens::AUTHORIZATION) == req.headers.end()) {
-        spdlog::info("Not found authorization token");
+        _log->error("Not found authorization token");
         res.status = HTTP::StatusCode::TOKEN_REQUIRED;
         return false;
     }
@@ -155,18 +156,18 @@ bool SessionManager::CheckActiveSessionToken(const Http::Request &req, Http::Res
     // Authorization: Bearer TOKEN
     String session_token = auth.substr(std::strlen(HTTP::Header::Tokens::BEARER) + 1);
     if (_leased_session_tokens.find(session_token) == _leased_session_tokens.end()) {
-        spdlog::info("Not found session '{}'", session_token);
+        _log->error("Not found session '{}'", session_token);
         res.status = HTTP::StatusCode::INVALID_TOKEN;
         return false;
     }
 
     if (!_active_session_token.has_value() || (_active_session_token.value() != session_token)) {
-        spdlog::info("'{}' is not active session token", session_token);
+        _log->error("'{}' is not active session token", session_token);
         res.status = HTTP::StatusCode::INVALID_TOKEN;
         return false;
     }
 
-    res.status =  HTTP::StatusCode::OK;
+    res.status = HTTP::StatusCode::OK;
     return true;
 };
 
@@ -180,13 +181,13 @@ bool SessionManager::RemoveSessionToken(const Http::Request &req, Http::Response
     Utils::fTrim(auth);
     String session_token = auth.substr(std::strlen(HTTP::Header::Tokens::BEARER) + 1);
     _leased_session_tokens.erase(session_token);
-    spdlog::info("Successfully removed session token '{}'", session_token);
+    _log->info("Successfully removed session token '{}'", session_token);
     if (_active_session_token.has_value() && (session_token == _active_session_token)) {
-        spdlog::info("Removed active session token '{}'", session_token);
+        _log->info("Removed active session token '{}'", session_token);
         _active_session_token = {};
     }
 
-    res.status =  HTTP::StatusCode::OK;
+    res.status = HTTP::StatusCode::OK;
 
     return true;
 };
@@ -209,14 +210,14 @@ bool SessionManager::RemoveActiveSessionToken(const String &session_token) {
         return true;
     }
 
-    spdlog::error("There is not active session token '{}'", session_token);
+    _log->error("There is not active session token '{}'", session_token);
     return false;
 }
 
 Optional<String> SessionManager::GetSessionToken(const Http::Request &req) {
     LockGuard<Mutex> _(_session_token_mutex);
     if (req.headers.find(HTTP::Header::Tokens::AUTHORIZATION) == req.headers.end()) {
-        spdlog::info("Not found authorization token");
+        _log->error("Not found authorization token");
         return {};
     }
 
@@ -225,7 +226,7 @@ Optional<String> SessionManager::GetSessionToken(const Http::Request &req) {
     // Authorization: Bearer TOKEN
     String session_token = auth.substr(std::strlen(HTTP::Header::Tokens::BEARER) + 1);
     if (_leased_session_tokens.find(session_token) == _leased_session_tokens.end()) {
-        spdlog::info("Not found session '{}'", session_token);
+        _log->error("Not found session '{}'", session_token);
         return {};
     }
 
@@ -250,7 +251,7 @@ void SessionManager::RemoveSessionTimeoutCallback(const String& callback_receive
 bool SessionManager::SetSessionTokenTimerOnce(const Http::Request &req, SessionTokenTimerCB timer_callback, const std::chrono::seconds timeout_sec) {
     auto session_token = GetSessionToken(req).value_or("");
     if (session_token.empty()) {
-        spdlog::error("There is not exists session token '{}'", session_token);
+        _log->error("There is not exists session token '{}'", session_token);
         return false;
     }
 
@@ -259,7 +260,7 @@ bool SessionManager::SetSessionTokenTimerOnce(const Http::Request &req, SessionT
     LockGuard<Mutex> _(_session_token_timers_mutex);
     auto timer_it = _session_token_timers.find(session_token);
     if ((timer_it != _session_token_timers.end()) && !timer_it->second.QuitFlag) {
-        spdlog::error("Timer for session token '{}' already exists", session_token);
+        _log->error("Timer for session token '{}' already exists", session_token);
         return false;
     }
 

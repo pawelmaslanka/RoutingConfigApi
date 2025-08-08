@@ -1237,7 +1237,7 @@ private:
         kernelProtocolSection << String(DEFAULT_INDENT, ' ') << "scan time 5;" << NEW_LINE;
         kernelProtocolSection << String(DEFAULT_INDENT, ' ') << "ipv4 {" << NEW_LINE;
         kernelProtocolSection << String(2 * DEFAULT_INDENT, ' ') << "export all;" << NEW_LINE;
-        kernelProtocolSection << String(2 * DEFAULT_INDENT, ' ') << "import all;" << NEW_LINE;
+        // kernelProtocolSection << String(2 * DEFAULT_INDENT, ' ') << "import all;" << NEW_LINE;
         kernelProtocolSection << String(DEFAULT_INDENT, ' ') << "};" << NEW_LINE;
         kernelProtocolSection << String(DEFAULT_INDENT, ' ') << "merge paths on limit 128;" << NEW_LINE;
         kernelProtocolSection << "}" << NEW_LINE;
@@ -1245,7 +1245,7 @@ private:
         kernelProtocolSection << "protocol kernel 'KERNEL_IPv6' {" << NEW_LINE;
         kernelProtocolSection << String(DEFAULT_INDENT, ' ') << "ipv6 {" << NEW_LINE;
         kernelProtocolSection << String(2 * DEFAULT_INDENT, ' ') << "export all;" << NEW_LINE;
-        kernelProtocolSection << String(2 * DEFAULT_INDENT, ' ') << "import all;" << NEW_LINE;
+        // kernelProtocolSection << String(2 * DEFAULT_INDENT, ' ') << "import all;" << NEW_LINE;
         kernelProtocolSection << String(DEFAULT_INDENT, ' ') << "};" << NEW_LINE;
         kernelProtocolSection << String(DEFAULT_INDENT, ' ') << "merge paths on limit 128;" << NEW_LINE;
         kernelProtocolSection << "}" << NEW_LINE;
