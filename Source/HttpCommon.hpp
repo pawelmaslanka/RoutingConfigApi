@@ -8,6 +8,7 @@
 namespace HTTP {
 enum class Method {
     GET,
+    PATCH,
     PUT,
     POST,
     DEL

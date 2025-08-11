@@ -357,14 +357,14 @@ else
 fi
 
 echo "Post update good config without session token"
-HTTP_STATUS=`curl -s -o /dev/null -w "%{http_code}" -X POST http://localhost:8001/config/running/update \
+HTTP_STATUS=`curl -s -o /dev/null -w "%{http_code}" -X PATCH http://localhost:8001/config/running/update \
    -H 'Content-Type: application/json' \
    -d '
 [
   {
     "op": "replace",
     "path": "/router-id",
-    "value": "192.0.2.2"
+    "value": "193.0.2.2"
   }
 ]'`
 
@@ -377,7 +377,7 @@ else
 fi
 
 echo "Post update good config with bad session token"
-HTTP_STATUS=`curl -s -o /dev/null -w "%{http_code}" -X POST http://localhost:8001/config/running/update \
+HTTP_STATUS=`curl -s -o /dev/null -w "%{http_code}" -X PATCH http://localhost:8001/config/running/update \
    -H 'Content-Type: application/json' \
    -H "Authorization: Bearer INVALID_TOKEN" \
    -d '
@@ -385,7 +385,7 @@ HTTP_STATUS=`curl -s -o /dev/null -w "%{http_code}" -X POST http://localhost:800
   {
     "op": "replace",
     "path": "/router-id",
-    "value": "192.0.2.2"
+    "value": "193.0.2.2"
   }
 ]'`
 
@@ -397,12 +397,12 @@ else
     exit 1
 fi
 
-echo "Get last request log"
-curl -s -X GET http://localhost:8001/log/last \
+echo "Get latest 1 log message"
+curl -s -X GET http://localhost:8001/logs/latest/1 \
    -H 'Content-Type: application/json'
 
 echo "Post update good config [1]"
-HTTP_STATUS=`curl -s -o /dev/null -w "%{http_code}" -X POST http://localhost:8001/config/running/update \
+HTTP_STATUS=`curl -s -o /dev/null -w "%{http_code}" -X PATCH http://localhost:8001/config/running/update \
    -H 'Content-Type: application/json' \
    -H "Authorization: Bearer ${SESSION_TOKEN}" \
    -d '
@@ -410,7 +410,7 @@ HTTP_STATUS=`curl -s -o /dev/null -w "%{http_code}" -X POST http://localhost:800
   {
     "op": "replace",
     "path": "/router-id",
-    "value": "192.0.2.2"
+    "value": "192.0.2.22"
   }
 ]'`
 
@@ -476,7 +476,7 @@ else
 fi
 
 echo "Post update good config [2]"
-HTTP_STATUS=`curl -s -o /dev/null -w "%{http_code}" -X POST http://localhost:8001/config/running/update \
+HTTP_STATUS=`curl -s -o /dev/null -w "%{http_code}" -X PATCH http://localhost:8001/config/running/update \
    -H 'Content-Type: application/json' \
    -H "Authorization: Bearer ${SESSION_TOKEN}" \
    -d '
@@ -484,7 +484,7 @@ HTTP_STATUS=`curl -s -o /dev/null -w "%{http_code}" -X POST http://localhost:800
   {
     "op": "replace",
     "path": "/router-id",
-    "value": "192.0.2.3"
+    "value": "192.1.2.3"
   }
 ]'`
 
@@ -515,9 +515,14 @@ else
 fi
 
 echo "Get candidate config after rollback the changes"
-curl -s -X GET http://localhost:8001/config/candidate \
+HTTP_RETURN_DATA=`curl -s -X GET http://localhost:8001/config/candidate \
    -H "Authorization: Bearer ${SESSION_TOKEN}" \
-   -H 'Content-Type: application/json' | jq
+   -H 'Content-Type: application/json'`
+
+if test "${HTTP_RETURN_DATA}" != "Failed"; then
+    echo "The candidate config should be pruned after rollback operation"
+    exit 1
+fi
 
 echo "Get running config which should be untouched with the previous candidate changes"
 curl -s -X GET http://localhost:8001/config/running \

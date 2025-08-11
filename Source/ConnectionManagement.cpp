@@ -86,6 +86,14 @@ bool Server::removeOnPutConnectionHandler(const String& id) {
     return removeConnectionHandler(_on_put_callback_by_id, id);
 }
 
+bool Server::addOnPatchConnectionHandler(const String& id, RequestCallback handler) {
+    return addConnectionHandler(_on_patch_callback_by_id, id, handler);
+}
+
+bool Server::removeOnPatchConnectionHandler(const String& id) {
+    return removeConnectionHandler(_on_patch_callback_by_id, id);
+}
+
 bool Server::Run(const String& host, const uint16_t port) {
     Http::Server srv;
     srv.Post(ConnectionManagement::URIRequestPath::Session::TOKEN, [this](const Http::Request &req, Http::Response &res) {
@@ -105,14 +113,14 @@ bool Server::Run(const String& host, const uint16_t port) {
         res.status = status ? HTTP::StatusCode::OK : HTTP::StatusCode::INTERNAL_SERVER_ERROR;
     });
 
-    srv.Post(ConnectionManagement::URIRequestPath::Config::RUNNING_UPDATE, [this](const Http::Request &req, Http::Response &res) {
+    srv.Patch(ConnectionManagement::URIRequestPath::Config::RUNNING_UPDATE, [this](const Http::Request &req, Http::Response &res) {
         if (!_session_mngr.SetActiveSessionToken(req, res)) {
             return;
         }
 
         _session_mngr.CancelSessionTokenTimerOnce(req);
         String return_data;
-        res.status = processRequest(HTTP::Method::POST, ConnectionManagement::URIRequestPath::Config::RUNNING_UPDATE, req.body, return_data);
+        res.status = processRequest(HTTP::Method::PATCH, ConnectionManagement::URIRequestPath::Config::RUNNING_UPDATE, req.body, return_data);
         auto return_message = HTTP::IsSuccess(static_cast<HTTP::StatusCode>(res.status)) ? return_data : "Failed";
         res.set_content(return_message, HTTP::ContentType::TEXT_PLAIN_RESP_CONTENT);
         if (!_session_mngr.SetSessionTokenTimerOnce(req, [this]([[maybe_unused]] const String session_token) {
@@ -169,14 +177,15 @@ bool Server::Run(const String& host, const uint16_t port) {
         res.set_content(return_message, HTTP::ContentType::TEXT_PLAIN_RESP_CONTENT);
     });
 
-    srv.Get(ConnectionManagement::URIRequestPath::Log::LAST_REQUEST, [this](const Http::Request &req, Http::Response &res) {
+    srv.Get(ConnectionManagement::URIRequestPath::Logs::LATEST_N, [this](const Http::Request &req, Http::Response &res) {
         // if (!_session_mngr.CheckActiveSessionToken(req, res)) {
         //     _log->info("There is not active session to get last request log message");
         //     return;
         // }
 
         String return_data;
-        auto status = processRequest(HTTP::Method::GET, ConnectionManagement::URIRequestPath::Log::LAST_REQUEST, req.body, return_data);
+        String request_data = req.matches[1];
+        auto status = processRequest(HTTP::Method::GET, ConnectionManagement::URIRequestPath::Logs::LATEST_N, request_data, return_data);
         auto return_message = status ? return_data : "Failed";
         res.set_content(return_message, HTTP::ContentType::TEXT_PLAIN_RESP_CONTENT);
         res.status = status ? HTTP::StatusCode::OK : HTTP::StatusCode::INTERNAL_SERVER_ERROR;
@@ -221,6 +230,18 @@ HTTP::StatusCode Server::processRequest(const HTTP::Method method, const String&
     }
     case HTTP::Method::PUT: {
         for (auto& [_, cb] : _on_put_callback_by_id) {
+            status_code = cb(path, request_data, return_data);
+            if (check_internal_success(status_code)) {
+                continue;
+            }
+            
+            return status_code;
+        }
+
+        break;
+    }
+    case HTTP::Method::PATCH: {
+        for (auto& [_, cb] : _on_patch_callback_by_id) {
             status_code = cb(path, request_data, return_data);
             if (check_internal_success(status_code)) {
                 continue;

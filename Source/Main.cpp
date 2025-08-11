@@ -18,6 +18,7 @@
 #include <spdlog/sinks/basic_file_sink.h>
 #include <spdlog/sinks/stdout_color_sinks.h>
 #include <spdlog/sinks/ostream_sink.h>
+#include <spdlog/sinks/ringbuffer_sink.h>
 
 #include <cstdlib>
 #include <iterator>
@@ -25,15 +26,27 @@
 namespace Std = StdLib;
 
 /// NOTE: During passing argument candidateConfigMngr to fSetupServerRequestHandlers() it should contains the same content what runningConfigMngr
-bool fSetupServerRequestHandlers(Std::SharedPtr<ConnectionManagement::Server>& cm, Std::SharedPtr<Config::IConfigManagement>& runningConfigMngr, Std::SharedPtr<Config::IConfigManagement>& candidateConfigMngr, Std::SharedPtr<Schema::ISchemaManagement> schemaMngr, Std::SharedPtr<Storage::IDataStorage>& runningConfigStorage, Std::SharedPtr<Storage::IDataStorage>& targetConfigStorage, Std::SharedPtr<Config::IConfigConverting> configConverter, Std::SharedPtr<Config::Executing::IConfigExecuting>& targetConfigExecutor, const Std::SharedPtr<ModuleRegistry>& moduleRegistry, Std::SharedPtr<Std::OStrStream>& userReqLogMsgBuf) {
-    cm->addOnPostConnectionHandler("config_running_update", [&runningConfigMngr, &candidateConfigMngr, schemaMngr, runningConfigStorage, targetConfigStorage, configConverter, targetConfigExecutor, moduleRegistry, userReqLogMsgBuf](const Std::String& path, Std::String dataRequest, Std::String& returnData) {
+bool fSetupServerRequestHandlers(Std::SharedPtr<ConnectionManagement::Server>& cm, Std::SharedPtr<Config::IConfigManagement>& runningConfigMngr, Std::SharedPtr<Config::IConfigManagement>& candidateConfigMngr, Std::SharedPtr<Schema::ISchemaManagement> schemaMngr, Std::SharedPtr<Storage::IDataStorage>& runningConfigStorage, Std::SharedPtr<Storage::IDataStorage>& targetConfigStorage, Std::SharedPtr<Config::IConfigConverting> configConverter, Std::SharedPtr<Config::Executing::IConfigExecuting>& targetConfigExecutor, const Std::SharedPtr<ModuleRegistry>& moduleRegistry) {
+    auto loggerRegistry = moduleRegistry->LoggerRegistry();
+    loggerRegistry->RegisterModule(Module::Name::SRV_USR_REQ_HANDLE);
+
+    static const size_t DEFAULT_RINGBUFFER_CAP = 64;
+    // The userReqLogMsgBuf is used to log messages related to external user interaction/handle request
+    auto srvUsrReqLogSink = std::make_shared<spdlog::sinks::ringbuffer_sink_mt>(DEFAULT_RINGBUFFER_CAP);
+    srvUsrReqLogSink->set_level(spdlog::level::err);
+    srvUsrReqLogSink->set_pattern("%v"); // Pattern: message only
+    loggerRegistry->AddLogSink(srvUsrReqLogSink);
+
+    auto srvUsrReqLog = loggerRegistry->Logger(Module::Name::SRV_USR_REQ_HANDLE);
+    srvUsrReqLog->set_level(spdlog::level::err);
+
+    cm->addOnPatchConnectionHandler("config_running_update", [&runningConfigMngr, &candidateConfigMngr, schemaMngr, runningConfigStorage, targetConfigStorage, configConverter, targetConfigExecutor, moduleRegistry, srvUsrReqLog](const Std::String& path, Std::String dataRequest, Std::String& returnData) {
         if (path != ConnectionManagement::URIRequestPath::Config::RUNNING_UPDATE) {
             spdlog::debug("Unexpected URI requested '{}' - expected '{}'", path, ConnectionManagement::URIRequestPath::Config::RUNNING_UPDATE);
             return HTTP::StatusCode::INTERNAL_SUCCESS;
         }
 
-        userReqLogMsgBuf->str({});
-        spdlog::debug("Get request on {} with POST method: {}", path, dataRequest);
+        spdlog::debug("Get request on {} with PATCH method: {}", path, dataRequest);
         // NOTE: Register new instance of class derived from Config::IConfigManagement,
         //       or consider refactoring this function and use template parameter do determine instance of class derived from Config::IConfigManagement
         if (!candidateConfigMngr) {
@@ -41,46 +54,50 @@ bool fSetupServerRequestHandlers(Std::SharedPtr<ConnectionManagement::Server>& c
                 candidateConfigMngr = std::make_shared<Config::JsonConfigManager>(*jsonBasedConfigMngr);
             }
             else {
-                *userReqLogMsgBuf << fmt::format("Unsupported type of derived class from Config::IConfigManagement");
+                srvUsrReqLog->error("Unsupported type of derived class from Config::IConfigManagement");
                 return HTTP::StatusCode::INTERNAL_SERVER_ERROR;
             }
         }
 
         ByteStream patchData(dataRequest.begin(), dataRequest.end());
         if (!candidateConfigMngr->ApplyPatch(patchData)) {
-            *userReqLogMsgBuf << fmt::format("Failed to apply patch to running config");
+            srvUsrReqLog->error("Failed to apply patch to running config");
             return HTTP::StatusCode::INTERNAL_SERVER_ERROR;
         }
 
         auto configData = candidateConfigMngr->SerializeConfig();
         if (!configData.has_value()) {
-            *userReqLogMsgBuf << fmt::format("Failed to serialize candidate config");
+            srvUsrReqLog->error("Failed to serialize candidate config");
             candidateConfigMngr = nullptr;
             return HTTP::StatusCode::INTERNAL_SERVER_ERROR;
         }
 
         if (!schemaMngr->ValidateData(configData.value())) {
-            *userReqLogMsgBuf << fmt::format("Failed to validate candidate config data against its schema");
+            srvUsrReqLog->error("Failed to validate candidate config data against its schema");
             candidateConfigMngr = nullptr;
             return HTTP::StatusCode::INTERNAL_SERVER_ERROR;
         }
 
         auto targetConfigData = configConverter->Convert(configData.value());
         if (!targetConfigData.has_value()) {
-            *userReqLogMsgBuf << fmt::format("Failed to convert native config into target config");
+            srvUsrReqLog->error("Failed to convert native config into target config");
             candidateConfigMngr = nullptr;
             return HTTP::StatusCode::INTERNAL_SERVER_ERROR;
         }
 
         if (!targetConfigStorage->SaveData(targetConfigData.value())) {
-            *userReqLogMsgBuf << fmt::format("Failed to save taget config into file {}", targetConfigStorage->URI());
+            srvUsrReqLog->error("Failed to save target config into file {}", targetConfigStorage->URI());
             candidateConfigMngr = nullptr;
             return HTTP::StatusCode::INTERNAL_SERVER_ERROR;
         }
 
         if (configConverter) {
             if (!targetConfigExecutor->Validate()) {
-                *userReqLogMsgBuf << fmt::format("Failed to validate candidate config by external program");
+                srvUsrReqLog->error("Failed to validate candidate config by external program");
+                if (!targetConfigStorage->SaveData(configConverter->Convert(runningConfigMngr->SerializeConfig().value()).value())) {
+                    srvUsrReqLog->error("Failed to restore running config into '{}'", targetConfigStorage->URI());
+                }
+
                 candidateConfigMngr = nullptr;
                 return HTTP::StatusCode::INTERNAL_SERVER_ERROR;
             }
@@ -89,17 +106,16 @@ bool fSetupServerRequestHandlers(Std::SharedPtr<ConnectionManagement::Server>& c
         return HTTP::StatusCode::OK;
     });
 
-    cm->addOnGetConnectionHandler("config_running_get", [&runningConfigMngr, userReqLogMsgBuf](const Std::String& path, Std::String dataRequest, Std::String& returnData) {
+    cm->addOnGetConnectionHandler("config_running_get", [&runningConfigMngr, srvUsrReqLog](const Std::String& path, Std::String dataRequest, Std::String& returnData) {
         if (path != ConnectionManagement::URIRequestPath::Config::RUNNING) {
             spdlog::debug("Unexpected URI requested '{}' - expected '{}'", path, ConnectionManagement::URIRequestPath::Config::RUNNING);
             return HTTP::StatusCode::INTERNAL_SUCCESS;
         }
 
-        userReqLogMsgBuf->str({});
         spdlog::debug("Get request running on {} with GET method: {}", path, dataRequest);
         auto configData = runningConfigMngr->SerializeConfig();
         if (!configData.has_value()) {
-            *userReqLogMsgBuf << fmt::format("Failed to serialize config");
+            srvUsrReqLog->error("Failed to serialize config");
             return HTTP::StatusCode::INTERNAL_SERVER_ERROR;
         }
 
@@ -112,23 +128,22 @@ bool fSetupServerRequestHandlers(Std::SharedPtr<ConnectionManagement::Server>& c
         return HTTP::StatusCode::OK;
     });
 
-    cm->addOnGetConnectionHandler("config_running_diff", [&runningConfigMngr, &schemaMngr, userReqLogMsgBuf](const Std::String& path, Std::String dataRequest, Std::String& returnData) {
+    cm->addOnGetConnectionHandler("config_running_diff", [&runningConfigMngr, &schemaMngr, srvUsrReqLog](const Std::String& path, Std::String dataRequest, Std::String& returnData) {
         if (path != ConnectionManagement::URIRequestPath::Config::RUNNING_DIFF) {
             spdlog::debug("Unexpected URI requested '{}' - expected '{}'", path, ConnectionManagement::URIRequestPath::Config::RUNNING_DIFF);
             return HTTP::StatusCode::INTERNAL_SUCCESS;
         }
 
-        userReqLogMsgBuf->str({});
         spdlog::debug("Get request on {} with POST diff method: {}", path, dataRequest);
         ByteStream otherConfigData(dataRequest.begin(), dataRequest.end());
         if (!schemaMngr->ValidateData(otherConfigData)) {
-            *userReqLogMsgBuf << fmt::format("Failed to validate other config data against its schema");
+            srvUsrReqLog->error("Failed to validate other config data against its schema");
             return HTTP::StatusCode::INTERNAL_SERVER_ERROR;
         }
 
         auto patchData = runningConfigMngr->MakeDiff(otherConfigData);
         if (!patchData.has_value()) {
-            *userReqLogMsgBuf << fmt::format("Failed to make a diff between running config and other config");
+            srvUsrReqLog->error("Failed to make a diff between running config and other config");
             return HTTP::StatusCode::INTERNAL_SERVER_ERROR;
         }
 
@@ -138,22 +153,21 @@ bool fSetupServerRequestHandlers(Std::SharedPtr<ConnectionManagement::Server>& c
         return HTTP::StatusCode::OK;
     });
 
-    cm->addOnGetConnectionHandler("config_candidate_get", [&candidateConfigMngr, userReqLogMsgBuf](const Std::String& path, Std::String dataRequest, Std::String& returnData) {
+    cm->addOnGetConnectionHandler("config_candidate_get", [&candidateConfigMngr, srvUsrReqLog](const Std::String& path, Std::String dataRequest, Std::String& returnData) {
         if (path != ConnectionManagement::URIRequestPath::Config::CANDIDATE) {
             spdlog::debug("Unexpected URI requested '{}' - expected '{}'", path, ConnectionManagement::URIRequestPath::Config::CANDIDATE);
             return HTTP::StatusCode::INTERNAL_SUCCESS;
         }
 
-        userReqLogMsgBuf->str({});
         spdlog::debug("Get request candidate on {} with GET method: {}", path, dataRequest);
         if (!candidateConfigMngr) {
-            *userReqLogMsgBuf << fmt::format("Not found active candidate config");
+            srvUsrReqLog->error("Not found active candidate config");
             return HTTP::StatusCode::INTERNAL_SERVER_ERROR;
         }
 
         auto configData = candidateConfigMngr->SerializeConfig();
         if (!configData.has_value()) {
-            *userReqLogMsgBuf << fmt::format("Failed to serialize candidate config");
+            srvUsrReqLog->error("Failed to serialize candidate config");
             return HTTP::StatusCode::INTERNAL_SUCCESS;
         }
 
@@ -163,13 +177,12 @@ bool fSetupServerRequestHandlers(Std::SharedPtr<ConnectionManagement::Server>& c
         return HTTP::StatusCode::OK;
     });
 
-    cm->addOnPutConnectionHandler("config_candidate_apply", [&runningConfigMngr, &candidateConfigMngr, &runningConfigStorage, targetConfigExecutor, userReqLogMsgBuf](const Std::String& path, Std::String dataRequest, Std::String& returnData) {
+    cm->addOnPutConnectionHandler("config_candidate_apply", [&runningConfigMngr, &candidateConfigMngr, &runningConfigStorage, targetConfigStorage, targetConfigExecutor, srvUsrReqLog](const Std::String& path, Std::String dataRequest, Std::String& returnData) {
         if (path != ConnectionManagement::URIRequestPath::Config::CANDIDATE) {
             spdlog::debug("Unexpected URI requested '{}' - expected '{}'", path, ConnectionManagement::URIRequestPath::Config::CANDIDATE);
             return HTTP::StatusCode::INTERNAL_SUCCESS;
         }
 
-        userReqLogMsgBuf->str({});
         spdlog::debug("Get request candidate on {} with PUT method: {}", path, dataRequest);
         if (!candidateConfigMngr) {
             spdlog::trace("Not found active candidate config");
@@ -178,24 +191,24 @@ bool fSetupServerRequestHandlers(Std::SharedPtr<ConnectionManagement::Server>& c
 
         auto candidateConfigData = candidateConfigMngr->SerializeConfig();
         if (!candidateConfigData.has_value()) {
-            *userReqLogMsgBuf << fmt::format("Failed to serialize candidate config");
+            srvUsrReqLog->error("Failed to serialize candidate config");
             return HTTP::StatusCode::INTERNAL_SERVER_ERROR;
         }
 
         if (targetConfigExecutor) {
             if (!targetConfigExecutor->Load()) {
-                *userReqLogMsgBuf << fmt::format("Failed to load candidate config by external program");
+                srvUsrReqLog->error("Failed to load candidate config by external program");
                 return HTTP::StatusCode::INTERNAL_SERVER_ERROR;
             }
         }
 
         if (!runningConfigStorage->SaveData(candidateConfigData.value())) {
-            *userReqLogMsgBuf << fmt::format("Failed to save candidate config into '{}'", runningConfigStorage->URI());
+            srvUsrReqLog->error("Failed to save candidate config into '{}'", runningConfigStorage->URI());
             return HTTP::StatusCode::INTERNAL_SERVER_ERROR;
         }
 
         if (!runningConfigMngr->LoadConfig()) {
-            *userReqLogMsgBuf << fmt::format("Failed to re-load running config after apply changes to candidate config");
+            srvUsrReqLog->error("Failed to re-load running config after apply changes to candidate config");
             return HTTP::StatusCode::INTERNAL_SERVER_ERROR;
         }
 
@@ -204,25 +217,34 @@ bool fSetupServerRequestHandlers(Std::SharedPtr<ConnectionManagement::Server>& c
     });
 
     // NOTE: It is also automatically called in case of expired session token
-    cm->addOnDeleteConnectionHandler("config_candidate_delete", [&candidateConfigMngr, userReqLogMsgBuf](const Std::String& path, Std::String dataRequest, Std::String& returnData) {
+    cm->addOnDeleteConnectionHandler("config_candidate_delete", [&runningConfigMngr, &candidateConfigMngr, &configConverter, targetConfigStorage, srvUsrReqLog](const Std::String& path, Std::String dataRequest, Std::String& returnData) {
         if (path != ConnectionManagement::URIRequestPath::Config::CANDIDATE) {
             spdlog::debug("Unexpected URI requested '{}' - expected '{}'", path, ConnectionManagement::URIRequestPath::Config::CANDIDATE);
             return HTTP::StatusCode::INTERNAL_SUCCESS;
         }
 
-        userReqLogMsgBuf->str({});
+        if (!targetConfigStorage->SaveData(configConverter->Convert(runningConfigMngr->SerializeConfig().value()).value())) {
+            srvUsrReqLog->error("Failed to restore running config into '{}'", targetConfigStorage->URI());
+            return HTTP::StatusCode::INTERNAL_SERVER_ERROR;
+        }
+
         spdlog::debug("Get request candidate on {} with DELETE method: {}", path, dataRequest);
         candidateConfigMngr = nullptr;
         return HTTP::StatusCode::OK;
     });
 
-    cm->addOnGetConnectionHandler("last_request_log_msg_get", [userReqLogMsgBuf](const Std::String& path, Std::String dataRequest, Std::String& returnData) {
-        if (path != ConnectionManagement::URIRequestPath::Log::LAST_REQUEST) {
-            spdlog::debug("Unexpected URI requested '{}' - expected '{}'", path, ConnectionManagement::URIRequestPath::Log::LAST_REQUEST);
+    cm->addOnGetConnectionHandler("logs_latest_n", [srvUsrReqLog, srvUsrReqLogSink](const Std::String& path, Std::String dataRequest, Std::String& returnData) {
+        if (path != ConnectionManagement::URIRequestPath::Logs::LATEST_N) {
+            spdlog::debug("Unexpected URI requested '{}' - expected '{}'", path, ConnectionManagement::URIRequestPath::Logs::LATEST_N);
             return HTTP::StatusCode::INTERNAL_SUCCESS;
         }
 
-        returnData = userReqLogMsgBuf->str();
+        Std::OStrStream returnDataBuf;
+        for (const auto& msg : srvUsrReqLogSink->last_raw(std::stoi(dataRequest))) {
+            returnDataBuf << fmt::format("{}\n", msg.payload);
+        }
+
+        returnData = returnDataBuf.str();
         return HTTP::StatusCode::OK;
     });
 
@@ -230,20 +252,6 @@ bool fSetupServerRequestHandlers(Std::SharedPtr<ConnectionManagement::Server>& c
 }
 
 int main(const int argc, const char* argv[]) {
-    auto consoleLogSink = std::make_shared<spdlog::sinks::stdout_color_sink_mt>();
-    consoleLogSink->set_level(spdlog::level::trace);
-    consoleLogSink->set_pattern("%+");
-
-    auto fileLogSink = std::make_shared<spdlog::sinks::basic_file_sink_mt>("/tmp/bgp_config_api.log", true);
-    fileLogSink->set_level(spdlog::level::trace);
-    fileLogSink->set_pattern("%+");
-
-    // The userReqLogMsgBuf is used to log messages related to external user interaction/handle request
-    auto userReqLogMsgBuf = std::make_shared<Std::OStrStream>();
-    auto onlyErrorLogSink = std::make_shared<spdlog::sinks::ostream_sink_mt>(*userReqLogMsgBuf);
-    onlyErrorLogSink->set_level(spdlog::level::err);
-    onlyErrorLogSink->set_pattern("%+");
-
     args::ArgumentParser argParser("Configuration Management System");
     args::HelpFlag help(argParser, "HELP", "Show this help menu", {'h', "help"});
     args::ValueFlag<Std::String> thisHostAddress(argParser, "ADDRESS", "The host binding address (hostname or IP address)", { 'a', "address" });
@@ -261,12 +269,12 @@ int main(const int argc, const char* argv[]) {
         ::exit(EXIT_SUCCESS);
     }
     catch (args::ParseError& e) {
-        *userReqLogMsgBuf << fmt::format("{}", e.what());
+        spdlog::error("{}", e.what());
         spdlog::info("{}", argParser.Help());
         ::exit(EXIT_FAILURE);
     }
     catch (args::ValidationError& e) {
-        *userReqLogMsgBuf << fmt::format("{}", e.what());
+        spdlog::error("{}", e.what());
         spdlog::info("{}", argParser.Help());
         ::exit(EXIT_FAILURE);
     }
@@ -276,7 +284,15 @@ int main(const int argc, const char* argv[]) {
         ::exit(EXIT_SUCCESS);
     }
 
-    auto loggerRegistry = std::make_shared<Log::LoggerRegistry>(spdlog::sinks_init_list{consoleLogSink, fileLogSink, onlyErrorLogSink});
+    auto consoleLogSink = std::make_shared<spdlog::sinks::stdout_color_sink_mt>();
+    consoleLogSink->set_level(spdlog::level::trace);
+    consoleLogSink->set_pattern("%+");
+
+    auto fileLogSink = std::make_shared<spdlog::sinks::basic_file_sink_mt>("/tmp/bgp_config_api.log", true);
+    fileLogSink->set_level(spdlog::level::trace);
+    fileLogSink->set_pattern("%+");
+
+    auto loggerRegistry = std::make_shared<Log::LoggerRegistry>(spdlog::sinks_init_list{consoleLogSink, fileLogSink});
     loggerRegistry->RegisterModule(Module::Name::CONFIG_EXEC);
     loggerRegistry->Logger(Module::Name::CONFIG_EXEC)->set_level(spdlog::level::trace);
     loggerRegistry->RegisterModule(Module::Name::CONFIG_MNGMT);
@@ -291,6 +307,7 @@ int main(const int argc, const char* argv[]) {
     loggerRegistry->Logger(Module::Name::SCHEMA_MNGMT)->set_level(spdlog::level::trace);
     loggerRegistry->RegisterModule(Module::Name::SESSION_MNGMT);
     loggerRegistry->Logger(Module::Name::SESSION_MNGMT)->set_level(spdlog::level::trace);
+
     auto moduleRegistry = std::make_shared<ModuleRegistry>();
     moduleRegistry->SetLoggerRegistry(loggerRegistry);
 
@@ -300,38 +317,38 @@ int main(const int argc, const char* argv[]) {
     Std::SharedPtr<Storage::IDataStorage> jsonSchemaFileStorage = std::make_shared<Storage::JsonFileStorage>(jSchemaFilename, moduleRegistry);
     auto jDataSchema = jsonSchemaFileStorage->LoadData();
     if (!jDataSchema.has_value()) {
-        *userReqLogMsgBuf << fmt::format("Failed to load JSON schema from file '{}'", jsonSchemaFileStorage->URI());
+        spdlog::error("Failed to load JSON schema from file '{}'", jsonSchemaFileStorage->URI());
         ::exit(EXIT_FAILURE);
     }
 
     spdlog::info("Loaded JSON schema from file '{}'", jsonSchemaFileStorage->URI());
     Std::SharedPtr<Schema::ISchemaManagement> jsonSchemaMngr = std::make_shared<Schema::JsonSchemaManager>(jsonSchemaFileStorage, moduleRegistry);
     if (!jsonSchemaMngr->LoadSchema()) {
-        *userReqLogMsgBuf << fmt::format("Failed to load JSON schema");
+        spdlog::error("Failed to load JSON schema");
         ::exit(EXIT_FAILURE);
     }
 
     Std::SharedPtr<Storage::IDataStorage> configFileStorage = std::make_shared<Storage::FileStorage>(jConfigFilename, moduleRegistry);
     Std::SharedPtr<Config::IConfigManagement> jsonConfigMngr = std::make_shared<Config::JsonConfigManager>(configFileStorage, moduleRegistry);
     if (!jsonConfigMngr->LoadConfig()) {
-        *userReqLogMsgBuf << fmt::format("Failed to load startup JSON config from file '{}'", configFileStorage->URI());
+        spdlog::error("Failed to load startup JSON config from file '{}'", configFileStorage->URI());
         ::exit(EXIT_FAILURE);
     }
 
     auto startupConfigDataToValid = jsonConfigMngr->SerializeConfig();
     if (!startupConfigDataToValid.has_value()) {
-        *userReqLogMsgBuf << fmt::format("Failed to serialize startup JSON config");
+        spdlog::error("Failed to serialize startup JSON config");
         ::exit(EXIT_FAILURE);
     }
 
     if (!jsonSchemaMngr->ValidateData(startupConfigDataToValid.value())) {
-        *userReqLogMsgBuf << fmt::format("Failed to validate startup JSON config against the schema");
+        spdlog::error("Failed to validate startup JSON config against the schema");
         ::exit(EXIT_FAILURE);
     }
 
     Std::SharedPtr<Config::IConfigManagement> jsonBackupConfigMngr = std::make_shared<Config::JsonConfigManager>(configFileStorage, moduleRegistry);
     if (!jsonBackupConfigMngr->LoadConfig()) {
-        *userReqLogMsgBuf << fmt::format("Failed to load JSON backup config");
+        spdlog::error("Failed to load JSON backup config");
         ::exit(EXIT_FAILURE);
     }
 
@@ -345,33 +362,32 @@ int main(const int argc, const char* argv[]) {
         
         auto birdConfigData = birdConfigConverter->Convert(startupConfigDataToValid.value());
         if (!birdConfigData.has_value()) {
-            *userReqLogMsgBuf << fmt::format("Failed to convert native config into BIRD config");
+            spdlog::error("Failed to convert native config into BIRD config");
             ::exit(EXIT_FAILURE);
         }
 
         if (!birdConfigFileStorage->SaveData(birdConfigData.value())) {
-            *userReqLogMsgBuf << fmt::format("Failed to save BIRD config into file {}", birdConfigFileStorage->URI());
+            spdlog::error("Failed to save BIRD config into file {}", birdConfigFileStorage->URI());
             ::exit(EXIT_FAILURE);
         }
 
         if (!birdConfigExecutor->Validate()) {
-            *userReqLogMsgBuf << fmt::format("Failed to validate coverted config by external program");
+            spdlog::error("Failed to validate coverted config by external program");
             ::exit(EXIT_FAILURE);
         }
     }
 
     auto cm = std::make_shared<ConnectionManagement::Server>(moduleRegistry);
-    if (!fSetupServerRequestHandlers(cm, jsonConfigMngr, jsonBackupConfigMngr, jsonSchemaMngr, configFileStorage, birdConfigFileStorage, birdConfigConverter, birdConfigExecutor, moduleRegistry, userReqLogMsgBuf)) {
-        *userReqLogMsgBuf << fmt::format("Failed to setup request handlers");
+    if (!fSetupServerRequestHandlers(cm, jsonConfigMngr, jsonBackupConfigMngr, jsonSchemaMngr, configFileStorage, birdConfigFileStorage, birdConfigConverter, birdConfigExecutor, moduleRegistry)) {
+        spdlog::error("Failed to setup request handlers");
         ::exit(EXIT_FAILURE);
     }
 
     if (!cm->Run(args::get(thisHostAddress), args::get(thisHostPort))) {
-        *userReqLogMsgBuf << fmt::format("Failed to run connection management server");
+        spdlog::error("Failed to run connection management server");
         ::exit(EXIT_FAILURE);
     }
 
     spdlog::info("The '{}' daemon is going to shutdown", argv[0]);
-
     ::exit(EXIT_SUCCESS);
 }

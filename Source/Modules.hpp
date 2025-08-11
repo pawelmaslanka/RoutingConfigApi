@@ -12,5 +12,6 @@ namespace Name {
     const String DATA_STORAGE = "DataStorage";
     const String SCHEMA_MNGMT = "SchemaMngmt";
     const String SESSION_MNGMT = "SessionMngmt";
+    const String SRV_USR_REQ_HANDLE = "SrvUsrReqHandle";
 } // namespace Name
 } // namespace Module

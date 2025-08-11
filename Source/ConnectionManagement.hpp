@@ -20,8 +20,8 @@ namespace Config {
     static constexpr auto RUNNING_DIFF = "/config/running/diff";
 } // namespace Config
 
-namespace Log {
-    static constexpr auto LAST_REQUEST = "/log/last";
+namespace Logs {
+    static constexpr auto LATEST_N = R"(/logs/latest/(\d+))";
 }
 
 namespace Session {
@@ -50,6 +50,8 @@ public:
     bool removeOnPostConnectionHandler(const Std::String& id);
     bool addOnPutConnectionHandler(const Std::String& id, RequestCallback handler);
     bool removeOnPutConnectionHandler(const Std::String& id);
+    bool addOnPatchConnectionHandler(const Std::String& id, RequestCallback handler);
+    bool removeOnPatchConnectionHandler(const Std::String& id);
     bool Run(const Std::String& host, const uint16_t port);
 
 private:
@@ -60,6 +62,7 @@ private:
     Std::Map<Std::String, RequestCallback> _on_get_callback_by_id;
     Std::Map<Std::String, RequestCallback> _on_post_callback_by_id;
     Std::Map<Std::String, RequestCallback> _on_put_callback_by_id;
+    Std::Map<Std::String, RequestCallback> _on_patch_callback_by_id;
     SessionManager _session_mngr;
     const Std::SharedPtr<ModuleRegistry> _module_registry;
     Std::SharedPtr<Log::SpdLogger> _log;
