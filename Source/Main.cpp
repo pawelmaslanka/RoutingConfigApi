@@ -177,9 +177,9 @@ bool fSetupServerRequestHandlers(Std::SharedPtr<ConnectionManagement::Server>& c
         return HTTP::StatusCode::OK;
     });
 
-    cm->addOnPutConnectionHandler("config_candidate_apply", [&runningConfigMngr, &candidateConfigMngr, &runningConfigStorage, targetConfigStorage, targetConfigExecutor, srvUsrReqLog](const Std::String& path, Std::String dataRequest, Std::String& returnData) {
-        if (path != ConnectionManagement::URIRequestPath::Config::CANDIDATE) {
-            spdlog::debug("Unexpected URI requested '{}' - expected '{}'", path, ConnectionManagement::URIRequestPath::Config::CANDIDATE);
+    cm->addOnPostConnectionHandler("config_candidate_commit", [&runningConfigMngr, &candidateConfigMngr, &runningConfigStorage, targetConfigStorage, targetConfigExecutor, srvUsrReqLog](const Std::String& path, Std::String dataRequest, Std::String& returnData) {
+        if (path != ConnectionManagement::URIRequestPath::Config::CANDIDATE_COMMIT) {
+            spdlog::debug("Unexpected URI requested '{}' - expected '{}'", path, ConnectionManagement::URIRequestPath::Config::CANDIDATE_COMMIT);
             return HTTP::StatusCode::INTERNAL_SUCCESS;
         }
 
@@ -233,7 +233,7 @@ bool fSetupServerRequestHandlers(Std::SharedPtr<ConnectionManagement::Server>& c
         return HTTP::StatusCode::OK;
     });
 
-    cm->addOnGetConnectionHandler("logs_latest_n", [srvUsrReqLog, srvUsrReqLogSink](const Std::String& path, Std::String dataRequest, Std::String& returnData) {
+    cm->addOnGetConnectionHandler("logs_latest_n_get", [srvUsrReqLog, srvUsrReqLogSink](const Std::String& path, Std::String dataRequest, Std::String& returnData) {
         if (path != ConnectionManagement::URIRequestPath::Logs::LATEST_N) {
             spdlog::debug("Unexpected URI requested '{}' - expected '{}'", path, ConnectionManagement::URIRequestPath::Logs::LATEST_N);
             return HTTP::StatusCode::INTERNAL_SUCCESS;

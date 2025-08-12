@@ -4,7 +4,7 @@ curl -s -X GET http://localhost:8001/config/running \
 
 SESSION_TOKEN="HelloWorld!"
 echo "Create new session token"
-HTTP_STATUS=`curl -s -o /dev/null -w "%{http_code}" -X POST http://localhost:8001/session/token \
+HTTP_STATUS=`curl -s -o /dev/null -w "%{http_code}" -X POST http://localhost:8001/session/token/create \
    -H 'Content-Type: application/text' \
    -d ${SESSION_TOKEN}`
 
@@ -423,7 +423,7 @@ else
 fi
 
 echo "Apply candidate config"
-HTTP_STATUS=`curl -s -o /dev/null -w "%{http_code}" -X PUT http://localhost:8001/config/candidate \
+HTTP_STATUS=`curl -s -o /dev/null -w "%{http_code}" -X POST http://localhost:8001/config/candidate/commit \
    -H 'Content-Type: application/json' \
    -H "Authorization: Bearer ${SESSION_TOKEN}" \
    -d ''`
@@ -463,7 +463,7 @@ echo "Check rollback capability"
 
 SESSION_TOKEN="HelloWorld2!"
 echo "Create next new session token"
-HTTP_STATUS=`curl -s -o /dev/null -w "%{http_code}" -X POST http://localhost:8001/session/token \
+HTTP_STATUS=`curl -s -o /dev/null -w "%{http_code}" -X POST http://localhost:8001/session/token/create \
    -H 'Content-Type: application/text' \
    -d ${SESSION_TOKEN}`
 

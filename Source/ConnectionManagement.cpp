@@ -96,7 +96,7 @@ bool Server::removeOnPatchConnectionHandler(const String& id) {
 
 bool Server::Run(const String& host, const uint16_t port) {
     Http::Server srv;
-    srv.Post(ConnectionManagement::URIRequestPath::Session::TOKEN, [this](const Http::Request &req, Http::Response &res) {
+    srv.Post(ConnectionManagement::URIRequestPath::Session::TOKEN_CREATE, [this](const Http::Request &req, Http::Response &res) {
         _session_mngr.RegisterSessionToken(req, res);
         return res.status;
     });
@@ -153,14 +153,14 @@ bool Server::Run(const String& host, const uint16_t port) {
         res.set_content(return_message, HTTP::ContentType::TEXT_PLAIN_RESP_CONTENT);
     });
 
-    srv.Put(ConnectionManagement::URIRequestPath::Config::CANDIDATE, [this](const Http::Request &req, Http::Response &res) {
+    srv.Post(ConnectionManagement::URIRequestPath::Config::CANDIDATE_COMMIT, [this](const Http::Request &req, Http::Response &res) {
         if (!_session_mngr.CheckActiveSessionToken(req, res)) {
             return;
         }
 
         _session_mngr.CancelSessionTokenTimerOnce(req);
         String return_data;
-        res.status = processRequest(HTTP::Method::PUT, ConnectionManagement::URIRequestPath::Config::CANDIDATE, req.body, return_data);
+        res.status = processRequest(HTTP::Method::POST, ConnectionManagement::URIRequestPath::Config::CANDIDATE_COMMIT, req.body, return_data);
         auto return_message = HTTP::IsSuccess((HTTP::StatusCode) res.status) ? return_data : "Failed";
         res.set_content(return_message, HTTP::ContentType::TEXT_PLAIN_RESP_CONTENT);
     });

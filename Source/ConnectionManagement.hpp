@@ -15,6 +15,7 @@ namespace ConnectionManagement {
 namespace URIRequestPath {
 namespace Config {
     static constexpr auto CANDIDATE = "/config/candidate";
+    static constexpr auto CANDIDATE_COMMIT = "/config/candidate/commit";
     static constexpr auto RUNNING = "/config/running";
     static constexpr auto RUNNING_UPDATE = "/config/running/update";
     static constexpr auto RUNNING_DIFF = "/config/running/diff";
@@ -26,6 +27,7 @@ namespace Logs {
 
 namespace Session {
     static constexpr auto TOKEN = "/session/token";
+    static constexpr auto TOKEN_CREATE = "/session/token/create";
 } // namespace Session
 }
 
