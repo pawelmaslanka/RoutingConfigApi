@@ -528,4 +528,155 @@ echo "Get running config which should be untouched with the previous candidate c
 curl -s -X GET http://localhost:8001/config/running \
    -H 'Content-Type: application/json' | jq
 
+echo "Delete current session token"
+HTTP_STATUS=`curl -s -o /dev/null -w "%{http_code}" -X DELETE http://localhost:8001/session/token \
+   -H 'Content-Type: application/json' \
+   -H "Authorization: Bearer ${SESSION_TOKEN}" \
+   -d ''`
+
+if [ ${HTTP_STATUS} -eq 200 ] 
+then 
+    echo "Successfully processed the request" 
+else 
+    echo "Failed to process the request (${HTTP_STATUS})"
+    exit 1
+fi
+
+echo "Create again new session token"
+HTTP_STATUS=`curl -s -o /dev/null -w "%{http_code}" -X POST http://localhost:8001/session/token/create \
+   -H 'Content-Type: application/text' \
+   -d ${SESSION_TOKEN}`
+
+if [ ${HTTP_STATUS} -eq 201 ] 
+then 
+    echo "Successfully processed the request" 
+else 
+    echo "Failed to process the request (${HTTP_STATUS})"
+    exit 1
+fi
+
+echo "Post update good config [3]"
+HTTP_STATUS=`curl -s -o /dev/null -w "%{http_code}" -X PATCH http://localhost:8001/config/running/update \
+   -H 'Content-Type: application/json' \
+   -H "Authorization: Bearer ${SESSION_TOKEN}" \
+   -d '
+[
+  {
+    "op": "replace",
+    "path": "/router-id",
+    "value": "127.0.0.1"
+  }
+]'`
+
+if [ ${HTTP_STATUS} -eq 200 ] 
+then 
+    echo "Successfully processed the request" 
+else 
+    echo "Failed to process the request (${HTTP_STATUS})"
+    exit 1
+fi
+
+echo "Apply candidate config and wait for confirm request"
+HTTP_STATUS=`curl -s -o /dev/null -w "%{http_code}" -X POST http://localhost:8001/config/candidate/commit/timeout/30 \
+   -H 'Content-Type: application/json' \
+   -H "Authorization: Bearer ${SESSION_TOKEN}" \
+   -d ''`
+
+if [ ${HTTP_STATUS} -eq 200 ] 
+then 
+    echo "Successfully processed the request" 
+else 
+    echo "Failed to process the request (${HTTP_STATUS})"
+    exit 1
+fi
+
+echo "Cancel candidate commit"
+HTTP_STATUS=`curl -s -o /dev/null -w "%{http_code}" -X POST http://localhost:8001/config/candidate/commit/cancel \
+   -H 'Content-Type: application/json' \
+   -H "Authorization: Bearer ${SESSION_TOKEN}" \
+   -d ''`
+
+if [ ${HTTP_STATUS} -eq 200 ] 
+then 
+    echo "Successfully processed the request" 
+else 
+    echo "Failed to process the request (${HTTP_STATUS})"
+    exit 1
+fi
+
+echo "Again apply candidate config and wait for commit-confirm request"
+HTTP_STATUS=`curl -s -o /dev/null -w "%{http_code}" -X POST http://localhost:8001/config/candidate/commit/timeout/30 \
+   -H 'Content-Type: application/json' \
+   -H "Authorization: Bearer ${SESSION_TOKEN}" \
+   -d ''`
+
+if [ ${HTTP_STATUS} -eq 200 ] 
+then 
+    echo "Successfully processed the request" 
+else 
+    echo "Failed to process the request (${HTTP_STATUS})"
+    exit 1
+fi
+
+echo "Create multiple session tokens"
+HTTP_STATUS=`curl -s -o /dev/null -w "%{http_code}" -X POST http://localhost:8001/session/token/create \
+   -H 'Content-Type: application/text' \
+   -d "HelloWorld3!"`
+
+if [ ${HTTP_STATUS} -eq 201 ] 
+then 
+    echo "Successfully processed the request" 
+else 
+    echo "Failed to process the request (${HTTP_STATUS})"
+    exit 1
+fi
+
+INTERRUPT_SESSION_TOKEN="HelloWorld4!"
+HTTP_STATUS=`curl -s -o /dev/null -w "%{http_code}" -X POST http://localhost:8001/session/token/create \
+   -H 'Content-Type: application/text' \
+   -d ${INTERRUPT_SESSION_TOKEN}`
+
+if [ ${HTTP_STATUS} -eq 201 ] 
+then 
+    echo "Successfully processed the request" 
+else 
+    echo "Failed to process the request (${HTTP_STATUS})"
+    exit 1
+fi
+
+echo "Try to interrupt pending commit-confirm process"
+HTTP_STATUS=`curl -s -o /dev/null -w "%{http_code}" -X PATCH http://localhost:8001/config/running/update \
+   -H 'Content-Type: application/json' \
+   -H "Authorization: Bearer ${INTERRUPT_SESSION_TOKEN}" \
+   -d '
+[
+  {
+    "op": "replace",
+    "path": "/router-id",
+    "value": "10.0.0.1"
+  }
+]'`
+
+if [ ${HTTP_STATUS} -ne 200 ] 
+then 
+    echo "Successfully processed the request" 
+else 
+    echo "Failed to process the request (${HTTP_STATUS})"
+    exit 1
+fi
+
+echo "Send commit-confirm request"
+HTTP_STATUS=`curl -s -o /dev/null -w "%{http_code}" -X POST http://localhost:8001/config/candidate/commit/confirm \
+   -H 'Content-Type: application/json' \
+   -H "Authorization: Bearer ${SESSION_TOKEN}" \
+   -d ''`
+
+if [ ${HTTP_STATUS} -eq 200 ] 
+then 
+    echo "Successfully processed the request" 
+else 
+    echo "Failed to process the request (${HTTP_STATUS})"
+    exit 1
+fi
+
 echo "Successfully passed the test!"

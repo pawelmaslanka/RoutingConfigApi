@@ -46,7 +46,7 @@ public:
         // Combine full execution command, e.g.: /opt/podman/bin/podman exec -it bird birdc configure undo
         auto birdcExecCmd = mBirdcExecCmd + " configure undo";
         mLog->trace("Rollback command to execute: '{}'", birdcExecCmd);
-        return ExecuteCmdAndMatchForExpectedOutput(birdcExecCmd, { "Reconfiguration in progress" });
+        return ExecuteCmdAndMatchForExpectedOutput(birdcExecCmd, { "Reconfiguration in progress", "Reconfigured" });
     }
 
 private:

@@ -25,8 +25,7 @@
 
 namespace Std = StdLib;
 
-/// NOTE: During passing argument candidateConfigMngr to fSetupServerRequestHandlers() it should contains the same content what runningConfigMngr
-bool fSetupServerRequestHandlers(Std::SharedPtr<ConnectionManagement::Server>& cm, Std::SharedPtr<Config::IConfigManagement>& runningConfigMngr, Std::SharedPtr<Config::IConfigManagement>& candidateConfigMngr, Std::SharedPtr<Schema::ISchemaManagement> schemaMngr, Std::SharedPtr<Storage::IDataStorage>& runningConfigStorage, Std::SharedPtr<Storage::IDataStorage>& targetConfigStorage, Std::SharedPtr<Config::IConfigConverting> configConverter, Std::SharedPtr<Config::Executing::IConfigExecuting>& targetConfigExecutor, const Std::SharedPtr<ModuleRegistry>& moduleRegistry) {
+bool fSetupServerRequestHandlers(Std::SharedPtr<ConnectionManagement::Server>& cm, Std::UniquePtr<Config::IConfigManagement>& runningConfigMngr, Std::SharedPtr<Schema::ISchemaManagement> schemaMngr, Std::SharedPtr<Storage::IDataStorage>& runningConfigStorage, Std::SharedPtr<Storage::IDataStorage>& targetConfigStorage, Std::SharedPtr<Config::IConfigConverting> configConverter, Std::SharedPtr<Config::Executing::IConfigExecuting>& targetConfigExecutor, const Std::SharedPtr<ModuleRegistry>& moduleRegistry) {
     auto loggerRegistry = moduleRegistry->LoggerRegistry();
     loggerRegistry->RegisterModule(Module::Name::SRV_USR_REQ_HANDLE);
 
@@ -40,18 +39,27 @@ bool fSetupServerRequestHandlers(Std::SharedPtr<ConnectionManagement::Server>& c
     auto srvUsrReqLog = loggerRegistry->Logger(Module::Name::SRV_USR_REQ_HANDLE);
     srvUsrReqLog->set_level(spdlog::level::err);
 
-    cm->addOnPatchConnectionHandler("config_running_update", [&runningConfigMngr, &candidateConfigMngr, schemaMngr, runningConfigStorage, targetConfigStorage, configConverter, targetConfigExecutor, moduleRegistry, srvUsrReqLog](const Std::String& path, Std::String dataRequest, Std::String& returnData) {
+    // Right now there can be active only single instance of candidate config
+    static Std::UniquePtr<Config::IConfigManagement> gCandidateConfigMngr;
+
+    cm->addOnPatchConnectionHandler("config_running_update", [&runningConfigMngr, &candidateConfigMngr = gCandidateConfigMngr, schemaMngr, runningConfigStorage, targetConfigStorage, configConverter, targetConfigExecutor, moduleRegistry, srvUsrReqLog](const Std::String& sessionId, const Std::String& path, Std::String dataRequest, Std::String& returnData) {
         if (path != ConnectionManagement::URIRequestPath::Config::RUNNING_UPDATE) {
             spdlog::debug("Unexpected URI requested '{}' - expected '{}'", path, ConnectionManagement::URIRequestPath::Config::RUNNING_UPDATE);
             return HTTP::StatusCode::INTERNAL_SUCCESS;
         }
 
         spdlog::debug("Get request on {} with PATCH method: {}", path, dataRequest);
+
+        if (candidateConfigMngr) {
+            srvUsrReqLog->error("There is other active session with pending candidate config changes");
+            return HTTP::StatusCode::INTERNAL_SERVER_ERROR;
+        }
+
         // NOTE: Register new instance of class derived from Config::IConfigManagement,
         //       or consider refactoring this function and use template parameter do determine instance of class derived from Config::IConfigManagement
         if (!candidateConfigMngr) {
-            if (auto jsonBasedConfigMngr = dynamic_pointer_cast<Config::JsonConfigManager>(runningConfigMngr)){
-                candidateConfigMngr = std::make_shared<Config::JsonConfigManager>(*jsonBasedConfigMngr);
+            if (auto jsonBasedConfigMngr = dynamic_cast<Config::JsonConfigManager*>(runningConfigMngr.get())) {
+                candidateConfigMngr.reset(new Config::JsonConfigManager(*jsonBasedConfigMngr));
             }
             else {
                 srvUsrReqLog->error("Unsupported type of derived class from Config::IConfigManagement");
@@ -68,37 +76,37 @@ bool fSetupServerRequestHandlers(Std::SharedPtr<ConnectionManagement::Server>& c
         auto configData = candidateConfigMngr->SerializeConfig();
         if (!configData.has_value()) {
             srvUsrReqLog->error("Failed to serialize candidate config");
-            candidateConfigMngr = nullptr;
+            candidateConfigMngr.reset(nullptr);
             return HTTP::StatusCode::INTERNAL_SERVER_ERROR;
         }
 
         if (!schemaMngr->ValidateData(configData.value())) {
             srvUsrReqLog->error("Failed to validate candidate config data against its schema");
-            candidateConfigMngr = nullptr;
+            candidateConfigMngr.reset(nullptr);
             return HTTP::StatusCode::INTERNAL_SERVER_ERROR;
         }
 
         auto targetConfigData = configConverter->Convert(configData.value());
         if (!targetConfigData.has_value()) {
             srvUsrReqLog->error("Failed to convert native config into target config");
-            candidateConfigMngr = nullptr;
+            candidateConfigMngr.reset(nullptr);
             return HTTP::StatusCode::INTERNAL_SERVER_ERROR;
         }
 
         if (!targetConfigStorage->SaveData(targetConfigData.value())) {
             srvUsrReqLog->error("Failed to save target config into file {}", targetConfigStorage->URI());
-            candidateConfigMngr = nullptr;
+            candidateConfigMngr.reset(nullptr);
             return HTTP::StatusCode::INTERNAL_SERVER_ERROR;
         }
 
-        if (configConverter) {
+        if (targetConfigExecutor) {
             if (!targetConfigExecutor->Validate()) {
                 srvUsrReqLog->error("Failed to validate candidate config by external program");
                 if (!targetConfigStorage->SaveData(configConverter->Convert(runningConfigMngr->SerializeConfig().value()).value())) {
                     srvUsrReqLog->error("Failed to restore running config into '{}'", targetConfigStorage->URI());
                 }
 
-                candidateConfigMngr = nullptr;
+                candidateConfigMngr.reset(nullptr);
                 return HTTP::StatusCode::INTERNAL_SERVER_ERROR;
             }
         }
@@ -106,7 +114,7 @@ bool fSetupServerRequestHandlers(Std::SharedPtr<ConnectionManagement::Server>& c
         return HTTP::StatusCode::OK;
     });
 
-    cm->addOnGetConnectionHandler("config_running_get", [&runningConfigMngr, srvUsrReqLog](const Std::String& path, Std::String dataRequest, Std::String& returnData) {
+    cm->addOnGetConnectionHandler("config_running_get", [&runningConfigMngr, srvUsrReqLog](const Std::String& sessionId, const Std::String& path, Std::String dataRequest, Std::String& returnData) {
         if (path != ConnectionManagement::URIRequestPath::Config::RUNNING) {
             spdlog::debug("Unexpected URI requested '{}' - expected '{}'", path, ConnectionManagement::URIRequestPath::Config::RUNNING);
             return HTTP::StatusCode::INTERNAL_SUCCESS;
@@ -128,7 +136,7 @@ bool fSetupServerRequestHandlers(Std::SharedPtr<ConnectionManagement::Server>& c
         return HTTP::StatusCode::OK;
     });
 
-    cm->addOnGetConnectionHandler("config_running_diff", [&runningConfigMngr, &schemaMngr, srvUsrReqLog](const Std::String& path, Std::String dataRequest, Std::String& returnData) {
+    cm->addOnGetConnectionHandler("config_running_diff", [&runningConfigMngr, &schemaMngr, srvUsrReqLog](const Std::String& sessionId, const Std::String& path, Std::String dataRequest, Std::String& returnData) {
         if (path != ConnectionManagement::URIRequestPath::Config::RUNNING_DIFF) {
             spdlog::debug("Unexpected URI requested '{}' - expected '{}'", path, ConnectionManagement::URIRequestPath::Config::RUNNING_DIFF);
             return HTTP::StatusCode::INTERNAL_SUCCESS;
@@ -153,7 +161,7 @@ bool fSetupServerRequestHandlers(Std::SharedPtr<ConnectionManagement::Server>& c
         return HTTP::StatusCode::OK;
     });
 
-    cm->addOnGetConnectionHandler("config_candidate_get", [&candidateConfigMngr, srvUsrReqLog](const Std::String& path, Std::String dataRequest, Std::String& returnData) {
+    cm->addOnGetConnectionHandler("config_candidate_get", [&candidateConfigMngr = gCandidateConfigMngr, srvUsrReqLog](const Std::String& sessionId, const Std::String& path, Std::String dataRequest, Std::String& returnData) {
         if (path != ConnectionManagement::URIRequestPath::Config::CANDIDATE) {
             spdlog::debug("Unexpected URI requested '{}' - expected '{}'", path, ConnectionManagement::URIRequestPath::Config::CANDIDATE);
             return HTTP::StatusCode::INTERNAL_SUCCESS;
@@ -177,13 +185,7 @@ bool fSetupServerRequestHandlers(Std::SharedPtr<ConnectionManagement::Server>& c
         return HTTP::StatusCode::OK;
     });
 
-    cm->addOnPostConnectionHandler("config_candidate_commit", [&runningConfigMngr, &candidateConfigMngr, &runningConfigStorage, targetConfigStorage, targetConfigExecutor, srvUsrReqLog](const Std::String& path, Std::String dataRequest, Std::String& returnData) {
-        if (path != ConnectionManagement::URIRequestPath::Config::CANDIDATE_COMMIT) {
-            spdlog::debug("Unexpected URI requested '{}' - expected '{}'", path, ConnectionManagement::URIRequestPath::Config::CANDIDATE_COMMIT);
-            return HTTP::StatusCode::INTERNAL_SUCCESS;
-        }
-
-        spdlog::debug("Get request candidate on {} with PUT method: {}", path, dataRequest);
+    static auto fApplyConfig = [&runningConfigMngr, &candidateConfigMngr = gCandidateConfigMngr, &runningConfigStorage, configConverter, targetConfigStorage, targetConfigExecutor, srvUsrReqLog](const Std::String& sessionId, const Std::String& path, Std::String dataRequest, Std::String& returnData) -> HTTP::StatusCode {
         if (!candidateConfigMngr) {
             spdlog::trace("Not found active candidate config");
             return HTTP::StatusCode::INTERNAL_SERVER_ERROR;
@@ -195,32 +197,126 @@ bool fSetupServerRequestHandlers(Std::SharedPtr<ConnectionManagement::Server>& c
             return HTTP::StatusCode::INTERNAL_SERVER_ERROR;
         }
 
+        auto targetConfigData = configConverter->Convert(candidateConfigData.value());
+        if (!targetConfigData.has_value()) {
+            srvUsrReqLog->error("Failed to convert candidate config into target config");
+            return HTTP::StatusCode::INTERNAL_SERVER_ERROR;
+        }
+
+        if (!targetConfigStorage->SaveData(targetConfigData.value())) {
+            srvUsrReqLog->error("Failed to save target config into file {}", targetConfigStorage->URI());
+            return HTTP::StatusCode::INTERNAL_SERVER_ERROR;
+        }
+
         if (targetConfigExecutor) {
             if (!targetConfigExecutor->Load()) {
                 srvUsrReqLog->error("Failed to load candidate config by external program");
+                if (!targetConfigStorage->SaveData(configConverter->Convert(runningConfigMngr->SerializeConfig().value()).value())) {
+                    srvUsrReqLog->error("Failed to restore running config into '{}'", targetConfigStorage->URI());
+                }
+
                 return HTTP::StatusCode::INTERNAL_SERVER_ERROR;
             }
         }
 
-        if (!runningConfigStorage->SaveData(candidateConfigData.value())) {
-            srvUsrReqLog->error("Failed to save candidate config into '{}'", runningConfigStorage->URI());
+        return HTTP::StatusCode::OK;
+    };
+
+    static Std::Optional<Std::String> waitCommitConfirmSessionId = {};
+
+    cm->addOnPostConnectionHandler("config_candidate_commit", [&applyConfig = fApplyConfig, &runningConfigMngr, &candidateConfigMngr = gCandidateConfigMngr, runningConfigStorage, srvUsrReqLog](const Std::String& sessionId, const Std::String& path, Std::String dataRequest, Std::String& returnData) {
+        if (path != ConnectionManagement::URIRequestPath::Config::CANDIDATE_COMMIT) {
+            spdlog::debug("Unexpected URI requested '{}' - expected '{}'", path, ConnectionManagement::URIRequestPath::Config::CANDIDATE_COMMIT);
+            return HTTP::StatusCode::INTERNAL_SUCCESS;
+        }
+
+        spdlog::debug("Get request candidate on {} with POST method: {}", path, dataRequest);
+        
+        auto result = applyConfig(sessionId, path, dataRequest, returnData);
+        if (result != HTTP::StatusCode::OK) {
+            return result;
+        }
+
+        if (!runningConfigStorage->SaveData(candidateConfigMngr->SerializeConfig().value())) {
+            srvUsrReqLog->error("Failed to save candidate config into running '{}'", runningConfigStorage->URI());
             return HTTP::StatusCode::INTERNAL_SERVER_ERROR;
         }
 
         if (!runningConfigMngr->LoadConfig()) {
-            srvUsrReqLog->error("Failed to re-load running config after apply changes to candidate config");
+            srvUsrReqLog->error("Failed to re-load running config after apply changes from candidate config");
             return HTTP::StatusCode::INTERNAL_SERVER_ERROR;
         }
 
-        candidateConfigMngr = nullptr;
+        candidateConfigMngr.reset(nullptr);
         return HTTP::StatusCode::OK;
     });
 
-    // NOTE: It is also automatically called in case of expired session token
-    cm->addOnDeleteConnectionHandler("config_candidate_delete", [&runningConfigMngr, &candidateConfigMngr, &configConverter, targetConfigStorage, srvUsrReqLog](const Std::String& path, Std::String dataRequest, Std::String& returnData) {
-        if (path != ConnectionManagement::URIRequestPath::Config::CANDIDATE) {
-            spdlog::debug("Unexpected URI requested '{}' - expected '{}'", path, ConnectionManagement::URIRequestPath::Config::CANDIDATE);
+    cm->addOnPostConnectionHandler("config_candidate_commit_timeout", [&applyConfig = fApplyConfig, &confirmBySessionId = waitCommitConfirmSessionId](const Std::String& sessionId, const Std::String& path, Std::String dataRequest, Std::String& returnData) {
+        if (path != ConnectionManagement::URIRequestPath::Config::CANDIDATE_COMMIT_TIMEOUT) {
+            spdlog::debug("Unexpected URI requested '{}' - expected '{}'", path, ConnectionManagement::URIRequestPath::Config::CANDIDATE_COMMIT_TIMEOUT);
             return HTTP::StatusCode::INTERNAL_SUCCESS;
+        }
+
+        spdlog::debug("Get request candidate on {} with POST method: {}", path, dataRequest);
+        auto result = applyConfig(sessionId, path, dataRequest, returnData);
+        if (result != HTTP::StatusCode::OK) {
+            return result;
+        }
+
+        confirmBySessionId = sessionId;
+        return HTTP::StatusCode::OK;
+    });
+
+    cm->addOnPostConnectionHandler("config_candidate_commit_confirm", [&applyConfig = fApplyConfig, &runningConfigMngr, &candidateConfigMngr = gCandidateConfigMngr, runningConfigStorage, srvUsrReqLog, &confirmBySessionId = waitCommitConfirmSessionId](const Std::String& sessionId, const Std::String& path, Std::String dataRequest, Std::String& returnData) {
+        if (path != ConnectionManagement::URIRequestPath::Config::CANDIDATE_COMMIT_CONFIRM) {
+            spdlog::debug("Unexpected URI requested '{}' - expected '{}'", path, ConnectionManagement::URIRequestPath::Config::CANDIDATE_COMMIT_CONFIRM);
+            return HTTP::StatusCode::INTERNAL_SUCCESS;
+        }
+
+        spdlog::debug("Get request candidate on {} with POST method: {}", path, dataRequest);
+        if (!confirmBySessionId.has_value()) {
+            spdlog::trace("There is not pending commit-confirm process");
+            return HTTP::StatusCode::INTERNAL_SERVER_ERROR;
+        }
+
+        if (confirmBySessionId.value() != sessionId) {
+            spdlog::trace("The session id '{}' is not owner of pending commit-confirm");
+            return HTTP::StatusCode::INTERNAL_SERVER_ERROR;
+        }
+
+        if (!runningConfigStorage->SaveData(candidateConfigMngr->SerializeConfig().value())) {
+            srvUsrReqLog->error("Failed to save candidate config into running '{}'", runningConfigStorage->URI());
+            return HTTP::StatusCode::INTERNAL_SERVER_ERROR;
+        }
+
+        if (!runningConfigMngr->LoadConfig()) {
+            srvUsrReqLog->error("Failed to re-load running config after apply changes from candidate config");
+            return HTTP::StatusCode::INTERNAL_SERVER_ERROR;
+        }
+
+        candidateConfigMngr.reset(nullptr);
+        return HTTP::StatusCode::OK;
+    });
+
+    cm->addOnPostConnectionHandler("config_candidate_commit_cancel", [&runningConfigMngr, &candidateConfigMngr = gCandidateConfigMngr, &configConverter, targetConfigStorage, targetConfigExecutor, srvUsrReqLog, &confirmBySessionId = waitCommitConfirmSessionId](const Std::String& sessionId, const Std::String& path, Std::String dataRequest, Std::String& returnData) {
+        if (path != ConnectionManagement::URIRequestPath::Config::CANDIDATE_COMMIT_CANCEL) {
+            spdlog::debug("Unexpected URI requested '{}' - expected '{}'", path, ConnectionManagement::URIRequestPath::Config::CANDIDATE_COMMIT_CANCEL);
+            return HTTP::StatusCode::INTERNAL_SUCCESS;
+        }
+
+        if (!confirmBySessionId.has_value()) {
+            srvUsrReqLog->trace("There is not pending commit-confirm process");
+            return HTTP::StatusCode::INTERNAL_SERVER_ERROR;
+        }
+
+        if (confirmBySessionId.value() != sessionId) {
+            srvUsrReqLog->trace("The session id '{}' is not owner of pending commit-confirm process", sessionId);
+            return HTTP::StatusCode::INTERNAL_SERVER_ERROR;
+        }
+
+        if (!candidateConfigMngr) {
+            spdlog::debug("There is not active candidate config");
+            return HTTP::StatusCode::OK;
         }
 
         if (!targetConfigStorage->SaveData(configConverter->Convert(runningConfigMngr->SerializeConfig().value()).value())) {
@@ -228,12 +324,59 @@ bool fSetupServerRequestHandlers(Std::SharedPtr<ConnectionManagement::Server>& c
             return HTTP::StatusCode::INTERNAL_SERVER_ERROR;
         }
 
-        spdlog::debug("Get request candidate on {} with DELETE method: {}", path, dataRequest);
-        candidateConfigMngr = nullptr;
+        if (targetConfigExecutor) {
+            if (!targetConfigExecutor->Rollback(targetConfigStorage)) {
+                srvUsrReqLog->error("Failed to load running config by external program");
+                return HTTP::StatusCode::INTERNAL_SERVER_ERROR;
+            }
+        }
+
+        // Don't reset canidate config instance, just continue actions on current changes
+        confirmBySessionId = std::nullopt;
         return HTTP::StatusCode::OK;
     });
 
-    cm->addOnGetConnectionHandler("logs_latest_n_get", [srvUsrReqLog, srvUsrReqLogSink](const Std::String& path, Std::String dataRequest, Std::String& returnData) {
+    // NOTE: It is also automatically called in case of expired session token
+    cm->addOnDeleteConnectionHandler("config_candidate_delete", [&runningConfigMngr, &candidateConfigMngr = gCandidateConfigMngr, &configConverter, targetConfigStorage, targetConfigExecutor, srvUsrReqLog, &confirmBySessionId = waitCommitConfirmSessionId](const Std::String& sessionId, const Std::String& path, Std::String dataRequest, Std::String& returnData) {
+        if (path != ConnectionManagement::URIRequestPath::Config::CANDIDATE) {
+            spdlog::debug("Unexpected URI requested '{}' - expected '{}'", path, ConnectionManagement::URIRequestPath::Config::CANDIDATE);
+            return HTTP::StatusCode::INTERNAL_SUCCESS;
+        }
+
+        if (confirmBySessionId.has_value()) {
+            // There is other session which waits for commit-confirm request. The request probably comes from other expired session (token)
+            if (confirmBySessionId.value() != sessionId) {
+                return HTTP::StatusCode::OK;
+            }
+        }
+
+        if (!candidateConfigMngr) {
+            spdlog::trace("There is not active candidate config");
+            return HTTP::StatusCode::OK;
+        }
+
+        DEFER({
+            candidateConfigMngr.reset(nullptr);
+            confirmBySessionId = std::nullopt;
+        });
+
+        if (!targetConfigStorage->SaveData(configConverter->Convert(runningConfigMngr->SerializeConfig().value()).value())) {
+            srvUsrReqLog->error("Failed to restore running config into '{}'", targetConfigStorage->URI());
+            return HTTP::StatusCode::INTERNAL_SERVER_ERROR;
+        }
+
+        if (targetConfigExecutor) {
+            // FIXME: Use targetConfigExecutor->Rollback()?
+            if (!targetConfigExecutor->Load()) {
+                srvUsrReqLog->error("Failed to load running config by external program");
+                return HTTP::StatusCode::INTERNAL_SERVER_ERROR;
+            }
+        }
+        
+        return HTTP::StatusCode::OK;
+    });
+
+    cm->addOnGetConnectionHandler("logs_latest_n_get", [srvUsrReqLog, srvUsrReqLogSink](const Std::String& sessionId, const Std::String& path, Std::String dataRequest, Std::String& returnData) {
         if (path != ConnectionManagement::URIRequestPath::Logs::LATEST_N) {
             spdlog::debug("Unexpected URI requested '{}' - expected '{}'", path, ConnectionManagement::URIRequestPath::Logs::LATEST_N);
             return HTTP::StatusCode::INTERNAL_SUCCESS;
@@ -329,7 +472,7 @@ int main(const int argc, const char* argv[]) {
     }
 
     Std::SharedPtr<Storage::IDataStorage> configFileStorage = std::make_shared<Storage::FileStorage>(jConfigFilename, moduleRegistry);
-    Std::SharedPtr<Config::IConfigManagement> jsonConfigMngr = std::make_shared<Config::JsonConfigManager>(configFileStorage, moduleRegistry);
+    Std::UniquePtr<Config::IConfigManagement> jsonConfigMngr = std::make_unique<Config::JsonConfigManager>(configFileStorage, moduleRegistry);
     if (!jsonConfigMngr->LoadConfig()) {
         spdlog::error("Failed to load startup JSON config from file '{}'", configFileStorage->URI());
         ::exit(EXIT_FAILURE);
@@ -343,12 +486,6 @@ int main(const int argc, const char* argv[]) {
 
     if (!jsonSchemaMngr->ValidateData(startupConfigDataToValid.value())) {
         spdlog::error("Failed to validate startup JSON config against the schema");
-        ::exit(EXIT_FAILURE);
-    }
-
-    Std::SharedPtr<Config::IConfigManagement> jsonBackupConfigMngr = std::make_shared<Config::JsonConfigManager>(configFileStorage, moduleRegistry);
-    if (!jsonBackupConfigMngr->LoadConfig()) {
-        spdlog::error("Failed to load JSON backup config");
         ::exit(EXIT_FAILURE);
     }
 
@@ -378,7 +515,7 @@ int main(const int argc, const char* argv[]) {
     }
 
     auto cm = std::make_shared<ConnectionManagement::Server>(moduleRegistry);
-    if (!fSetupServerRequestHandlers(cm, jsonConfigMngr, jsonBackupConfigMngr, jsonSchemaMngr, configFileStorage, birdConfigFileStorage, birdConfigConverter, birdConfigExecutor, moduleRegistry)) {
+    if (!fSetupServerRequestHandlers(cm, jsonConfigMngr, jsonSchemaMngr, configFileStorage, birdConfigFileStorage, birdConfigConverter, birdConfigExecutor, moduleRegistry)) {
         spdlog::error("Failed to setup request handlers");
         ::exit(EXIT_FAILURE);
     }

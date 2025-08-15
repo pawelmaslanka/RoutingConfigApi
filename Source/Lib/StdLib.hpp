@@ -16,6 +16,7 @@
 #include <string>
 #include <string_view>
 #include <thread>
+#include <utility>
 #include <vector>
 
 /** Provides aliases for types from C++ Standard Library */
@@ -40,4 +41,5 @@ template<class T> using WeakPtr = std::weak_ptr<T>;
 template<class T> using Vector = std::vector<T>;
 
 template<class Key, class T> using Map = std::map<Key, T>;
+template<class T1, class T2> using Pair = std::pair<T1, T2>;
 } // namespace StdTypes

@@ -100,24 +100,20 @@ bool SessionManager::RegisterSessionToken(const Http::Request &req, Http::Respon
 }
 
 bool SessionManager::CheckSessionToken(const Http::Request &req, Http::Response &res) {
-    LockGuard<Mutex> _(_session_token_mutex);
-    if (req.headers.find(HTTP::Header::Tokens::AUTHORIZATION) == req.headers.end()) {
-        _log->error("Not found authorization token");
+    auto session_token = GetSessionTokenHelper(req);
+    if (!session_token.has_value()) {
         res.status = HTTP::StatusCode::TOKEN_REQUIRED;
         return false;
     }
 
-    String auth = req.get_header_value(HTTP::Header::Tokens::AUTHORIZATION);
-    Utils::fTrim(auth);
-    // Authorization: Bearer TOKEN
-    String session_token = auth.substr(std::strlen(HTTP::Header::Tokens::BEARER) + 1);
-    if (_leased_session_tokens.find(session_token) == _leased_session_tokens.end()) {
-        _log->error("Not found session '{}'", session_token);
+    LockGuard<Mutex> _(_session_token_mutex);
+    if (_leased_session_tokens.find(session_token.value()) == _leased_session_tokens.end()) {
+        _log->error("Not found session '{}'", session_token.value());
         res.status = HTTP::StatusCode::INVALID_TOKEN;
         return false;
     }
 
-    _leased_session_tokens[session_token].LastRequestAt = std::chrono::system_clock::now();
+    _leased_session_tokens[session_token.value()].LastRequestAt = std::chrono::system_clock::now();
     res.status = HTTP::StatusCode::OK;
     return true;
 };
@@ -127,42 +123,36 @@ bool SessionManager::SetActiveSessionToken(const Http::Request &req, Http::Respo
         return false;
     }
 
+    auto session_token = GetSessionTokenHelper(req);
+    // There is not required to check validity of session token since it is done by CheckSessionToken()
     LockGuard<Mutex> _(_session_token_mutex);
-    String auth = req.get_header_value(HTTP::Header::Tokens::AUTHORIZATION);
-    Utils::fTrim(auth);
-    // Authorization: Bearer TOKEN
-    String session_token = auth.substr(std::strlen(HTTP::Header::Tokens::BEARER) + 1);
-    if (_active_session_token.has_value() && (_active_session_token.value() != session_token)) {
+    if (_active_session_token.has_value() && (_active_session_token.value() != session_token.value())) {
         res.set_content("There is already active session '" + _active_session_token.value() + "'", HTTP::ContentType::TEXT_PLAIN_RESP_CONTENT);
         res.status = HTTP::StatusCode::CONFLICT;
         return false;
     }
 
-    _active_session_token = session_token;
+    _active_session_token = session_token.value();
     res.status = HTTP::StatusCode::OK;
     return true;
 };
 
 bool SessionManager::CheckActiveSessionToken(const Http::Request &req, Http::Response &res) {
-    LockGuard<Mutex> _(_session_token_mutex);
-    if (req.headers.find(HTTP::Header::Tokens::AUTHORIZATION) == req.headers.end()) {
-        _log->error("Not found authorization token");
+    auto session_token = GetSessionTokenHelper(req);
+    if (!session_token.has_value()) {
         res.status = HTTP::StatusCode::TOKEN_REQUIRED;
         return false;
     }
 
-    String auth = req.get_header_value(HTTP::Header::Tokens::AUTHORIZATION);
-    Utils::fTrim(auth);
-    // Authorization: Bearer TOKEN
-    String session_token = auth.substr(std::strlen(HTTP::Header::Tokens::BEARER) + 1);
-    if (_leased_session_tokens.find(session_token) == _leased_session_tokens.end()) {
-        _log->error("Not found session '{}'", session_token);
+    LockGuard<Mutex> _(_session_token_mutex);
+    if (_leased_session_tokens.find(session_token.value()) == _leased_session_tokens.end()) {
+        _log->error("Not found session '{}'", session_token.value());
         res.status = HTTP::StatusCode::INVALID_TOKEN;
         return false;
     }
 
-    if (!_active_session_token.has_value() || (_active_session_token.value() != session_token)) {
-        _log->error("'{}' is not active session token", session_token);
+    if (!_active_session_token.has_value() || (_active_session_token.value() != session_token.value())) {
+        _log->error("'{}' is not active session token", session_token.value());
         res.status = HTTP::StatusCode::INVALID_TOKEN;
         return false;
     }
@@ -176,14 +166,14 @@ bool SessionManager::RemoveSessionToken(const Http::Request &req, Http::Response
         return false;
     }
 
+    auto session_token = GetSessionTokenHelper(req);
+    // There is not required to check validity of session token since it is done by CheckSessionToken()
+
     LockGuard<Mutex> _(_session_token_mutex);
-    String auth = req.get_header_value(HTTP::Header::Tokens::AUTHORIZATION);
-    Utils::fTrim(auth);
-    String session_token = auth.substr(std::strlen(HTTP::Header::Tokens::BEARER) + 1);
-    _leased_session_tokens.erase(session_token);
-    _log->info("Successfully removed session token '{}'", session_token);
-    if (_active_session_token.has_value() && (session_token == _active_session_token)) {
-        _log->info("Removed active session token '{}'", session_token);
+    _leased_session_tokens.erase(session_token.value());
+    _log->info("Successfully removed session token '{}'", session_token.value());
+    if (_active_session_token.has_value() && (session_token.value() == _active_session_token)) {
+        _log->info("Removed active session token '{}'", session_token.value());
         _active_session_token = {};
     }
 
@@ -215,7 +205,20 @@ bool SessionManager::RemoveActiveSessionToken(const String &session_token) {
 }
 
 Optional<String> SessionManager::GetSessionToken(const Http::Request &req) {
-    LockGuard<Mutex> _(_session_token_mutex);
+    auto session_token = GetSessionTokenHelper(req);
+    if (session_token.has_value()) {
+        LockGuard<Mutex> _(_session_token_mutex);
+        if (_leased_session_tokens.find(session_token.value()) != _leased_session_tokens.end()) {
+            return session_token.value();
+        }
+
+        _log->error("Not found session '{}'", session_token.value());
+    }
+
+    return {};
+}
+
+Optional<String> SessionManager::GetSessionTokenHelper(const Http::Request &req) {
     if (req.headers.find(HTTP::Header::Tokens::AUTHORIZATION) == req.headers.end()) {
         _log->error("Not found authorization token");
         return {};
@@ -224,13 +227,7 @@ Optional<String> SessionManager::GetSessionToken(const Http::Request &req) {
     String auth = req.get_header_value(HTTP::Header::Tokens::AUTHORIZATION);
     Utils::fTrim(auth);
     // Authorization: Bearer TOKEN
-    String session_token = auth.substr(std::strlen(HTTP::Header::Tokens::BEARER) + 1);
-    if (_leased_session_tokens.find(session_token) == _leased_session_tokens.end()) {
-        _log->error("Not found session '{}'", session_token);
-        return {};
-    }
-
-    return session_token;
+    return auth.substr(std::strlen(HTTP::Header::Tokens::BEARER) + 1);
 }
 
 Optional<String> SessionManager::GetActiveSessionToken() {

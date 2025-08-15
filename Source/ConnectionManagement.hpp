@@ -16,13 +16,16 @@ namespace URIRequestPath {
 namespace Config {
     static constexpr auto CANDIDATE = "/config/candidate";
     static constexpr auto CANDIDATE_COMMIT = "/config/candidate/commit";
+    static constexpr auto CANDIDATE_COMMIT_CANCEL = "/config/candidate/commit/cancel"; // Rollback
+    static constexpr auto CANDIDATE_COMMIT_CONFIRM = "/config/candidate/commit/confirm";
+    static constexpr auto CANDIDATE_COMMIT_TIMEOUT = R"(/config/candidate/commit/timeout/(\d+))"; // FIXME: Limit allowed number value
     static constexpr auto RUNNING = "/config/running";
     static constexpr auto RUNNING_UPDATE = "/config/running/update";
     static constexpr auto RUNNING_DIFF = "/config/running/diff";
 } // namespace Config
 
 namespace Logs {
-    static constexpr auto LATEST_N = R"(/logs/latest/(\d+))";
+    static constexpr auto LATEST_N = R"(/logs/latest/(\d+))"; // FIXME: Limit allowed number value
 }
 
 namespace Session {
@@ -38,7 +41,7 @@ public:
     static bool post(const Std::String& host_addr, const Std::String& path, const Std::String& body);
 };
 
-using RequestCallback = std::function<HTTP::StatusCode(const Std::String& path, Std::String data_request, Std::String& return_data)>;
+using RequestCallback = std::function<HTTP::StatusCode(const Std::String& session_id, const Std::String& path, Std::String data_request, Std::String& return_data)>;
 
 class Server {
 public:
@@ -57,7 +60,7 @@ public:
     bool Run(const Std::String& host, const uint16_t port);
 
 private:
-    HTTP::StatusCode processRequest(const HTTP::Method method, const Std::String& path, const Std::String& request_data, Std::String& return_data);
+    HTTP::StatusCode processRequest(const Std::String& session_token, const HTTP::Method method, const Std::String& path, const Std::String& request_data, Std::String& return_data);
     bool addConnectionHandler(Std::Map<Std::String, RequestCallback>& callbacks, const Std::String& id, RequestCallback handler);
     bool removeConnectionHandler(Std::Map<Std::String, RequestCallback>& callbacks, const Std::String& id);
     Std::Map<Std::String, RequestCallback> _on_delete_callback_by_id;

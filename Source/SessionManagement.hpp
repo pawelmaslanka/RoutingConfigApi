@@ -69,4 +69,6 @@ private:
     Std::Mutex _session_token_timers_mutex;
     const Std::SharedPtr<ModuleRegistry> _module_registry;
     Std::SharedPtr<Log::SpdLogger> _log;
+
+    Std::Optional<Std::String> GetSessionTokenHelper(const Http::Request &req);
 };
