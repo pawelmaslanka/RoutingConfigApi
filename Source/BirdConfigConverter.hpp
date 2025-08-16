@@ -1064,14 +1064,23 @@ private:
         return filterStmtOutput.str();
     }
 
-    Optional<String> RenderGlobalRouterInfo(const Json::JSON& jConfig) {
+    Optional<String> RenderRouterId(const Json::JSON& jConfig, const size_t indentSize) {
         auto routerIdIt = jConfig.find(Property::ROUTER_ID);
         if (routerIdIt == jConfig.end()) {
-            mLog->error("Not found key '{}' in JSON data", Property::ROUTER_ID);
             return {};
         }
 
-        return String("router id ") + routerIdIt.value().template get<String>() + ";" + NEW_LINE;
+        return String(indentSize, ' ') + "router id " + routerIdIt.value().template get<String>() + ";" + NEW_LINE;
+    }
+
+    Optional<String> RenderGlobalRouterInfo(const Json::JSON& jConfig) {
+        auto routerIdStmt = RenderRouterId(jConfig, 0);
+        if (!routerIdStmt.has_value()) {
+            mLog->error("Not found key '{}' in JSON data", Property::ROUTER_ID);
+            return {};
+        }
+        
+        return routerIdStmt.value();
     }
 
     Optional<String> RenderBgpProtocol(const Json::JSON& jConfig, Stack<UniquePtr<ConfigNodeRendering>>& configNodes) {
@@ -1147,6 +1156,13 @@ private:
         for (auto& [sessionName, sessionDetails] : sessionsIt->items()) {
             configNodes.emplace(std::make_unique<ProtocolBgp>(sessionName));
             birdBgpFullConfig << configNodes.top()->Prolog();
+
+            if (sessionDetails.find(Property::ROUTER_ID) != sessionDetails.end()) {
+                auto routerIdStmt = RenderRouterId(sessionsIt->at(sessionName), indent + DEFAULT_INDENT);
+                if (routerIdStmt.has_value()) {
+                    birdBgpFullConfig << routerIdStmt.value();
+                }
+            }
 
             auto propertyIt = sessionDetails.find(Property::PEER);
             if (propertyIt == sessionDetails.end()) {

@@ -426,6 +426,9 @@
                     }
                   ]
                 },
+                "router-id": {
+                  "$ref": "#/$defs/ipv4-addr-type"
+                },
                 "ebgp": {
                   "type": "object",
                   "properties": {

@@ -428,28 +428,28 @@ int main(const int argc, const char* argv[]) {
     }
 
     auto consoleLogSink = std::make_shared<spdlog::sinks::stdout_color_sink_mt>();
-    consoleLogSink->set_level(spdlog::level::trace);
+    consoleLogSink->set_level(spdlog::level::err);
     consoleLogSink->set_pattern("%+");
 
     auto fileLogSink = std::make_shared<spdlog::sinks::basic_file_sink_mt>("/tmp/bgp_config_api.log", true);
-    fileLogSink->set_level(spdlog::level::trace);
+    fileLogSink->set_level(spdlog::level::err);
     fileLogSink->set_pattern("%+");
 
     auto loggerRegistry = std::make_shared<Log::LoggerRegistry>(spdlog::sinks_init_list{consoleLogSink, fileLogSink});
     loggerRegistry->RegisterModule(Module::Name::CONFIG_EXEC);
-    loggerRegistry->Logger(Module::Name::CONFIG_EXEC)->set_level(spdlog::level::trace);
+    loggerRegistry->Logger(Module::Name::CONFIG_EXEC)->set_level(spdlog::level::err);
     loggerRegistry->RegisterModule(Module::Name::CONFIG_MNGMT);
-    loggerRegistry->Logger(Module::Name::CONFIG_MNGMT)->set_level(spdlog::level::trace);
+    loggerRegistry->Logger(Module::Name::CONFIG_MNGMT)->set_level(spdlog::level::err);
     loggerRegistry->RegisterModule(Module::Name::CONFIG_TRANSL);
-    loggerRegistry->Logger(Module::Name::CONFIG_TRANSL)->set_level(spdlog::level::trace);
+    loggerRegistry->Logger(Module::Name::CONFIG_TRANSL)->set_level(spdlog::level::err);
     loggerRegistry->RegisterModule(Module::Name::CONN_MNGMT);
-    loggerRegistry->Logger(Module::Name::CONN_MNGMT)->set_level(spdlog::level::trace);
+    loggerRegistry->Logger(Module::Name::CONN_MNGMT)->set_level(spdlog::level::err);
     loggerRegistry->RegisterModule(Module::Name::DATA_STORAGE);
-    loggerRegistry->Logger(Module::Name::DATA_STORAGE)->set_level(spdlog::level::trace);
+    loggerRegistry->Logger(Module::Name::DATA_STORAGE)->set_level(spdlog::level::err);
     loggerRegistry->RegisterModule(Module::Name::SCHEMA_MNGMT);
-    loggerRegistry->Logger(Module::Name::SCHEMA_MNGMT)->set_level(spdlog::level::trace);
+    loggerRegistry->Logger(Module::Name::SCHEMA_MNGMT)->set_level(spdlog::level::err);
     loggerRegistry->RegisterModule(Module::Name::SESSION_MNGMT);
-    loggerRegistry->Logger(Module::Name::SESSION_MNGMT)->set_level(spdlog::level::trace);
+    loggerRegistry->Logger(Module::Name::SESSION_MNGMT)->set_level(spdlog::level::err);
 
     auto moduleRegistry = std::make_shared<ModuleRegistry>();
     moduleRegistry->SetLoggerRegistry(loggerRegistry);

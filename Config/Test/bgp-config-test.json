@@ -3,6 +3,7 @@
   "bgp": {
     "sessions": {
       "peer1": {
+        "router-id": "192.0.2.2",
         "peer": {
           "address": {
             "range": "192.0.2.0/29"
