@@ -74,7 +74,7 @@ SessionManager::SessionManager(const std::chrono::seconds session_timeout_sec, S
                 _session_token_timers.erase(timer_it);
             }
 
-            std::this_thread::sleep_for(10s);
+            std::this_thread::sleep_for(5s);
         }
     } },
     _module_registry(module_registry), _log(module_registry->LoggerRegistry()->Logger(Module::Name::SESSION_MNGMT)) {

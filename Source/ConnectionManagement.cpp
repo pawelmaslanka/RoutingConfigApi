@@ -131,7 +131,7 @@ bool Server::Run(const String& host, const uint16_t port) {
     srv.Get(ConnectionManagement::URIRequestPath::Config::RUNNING_DIFF, [this](const Http::Request &req, Http::Response &res) {
         String return_data;
         res.status = processRequest(NO_SESSION_TOKEN, HTTP::Method::GET, ConnectionManagement::URIRequestPath::Config::RUNNING_DIFF, req.body, return_data);
-        auto return_message = HTTP::IsSuccess((HTTP::StatusCode) res.status) ? return_data : "Failed";
+        auto return_message = HTTP::IsSuccess(static_cast<HTTP::StatusCode>(res.status)) ? return_data : "Failed";
         res.set_content(return_message, HTTP::ContentType::TEXT_PLAIN_RESP_CONTENT);
     });
 
@@ -143,7 +143,7 @@ bool Server::Run(const String& host, const uint16_t port) {
 
         String return_data;
         res.status = processRequest(NO_SESSION_TOKEN, HTTP::Method::GET, ConnectionManagement::URIRequestPath::Config::CANDIDATE, req.body, return_data);
-        auto return_message = HTTP::IsSuccess((HTTP::StatusCode) res.status) ? return_data : "Failed";
+        auto return_message = HTTP::IsSuccess(static_cast<HTTP::StatusCode>(res.status)) ? return_data : "Failed";
         res.set_content(return_message, HTTP::ContentType::TEXT_PLAIN_RESP_CONTENT);
     });
 
@@ -156,7 +156,7 @@ bool Server::Run(const String& host, const uint16_t port) {
         _session_mngr.CancelSessionTokenTimerOnce(req);
         String return_data;
         res.status = processRequest(session_token, HTTP::Method::POST, ConnectionManagement::URIRequestPath::Config::CANDIDATE_COMMIT, req.body, return_data);
-        auto return_message = HTTP::IsSuccess((HTTP::StatusCode) res.status) ? return_data : "Failed";
+        auto return_message = HTTP::IsSuccess(static_cast<HTTP::StatusCode>(res.status)) ? return_data : "Failed";
         res.set_content(return_message, HTTP::ContentType::TEXT_PLAIN_RESP_CONTENT);
     });
 
@@ -169,7 +169,7 @@ bool Server::Run(const String& host, const uint16_t port) {
         _session_mngr.CancelSessionTokenTimerOnce(req);
         String return_data;
         res.status = processRequest(session_token, HTTP::Method::POST, ConnectionManagement::URIRequestPath::Config::CANDIDATE_COMMIT_CONFIRM, req.body, return_data);
-        auto return_message = HTTP::IsSuccess((HTTP::StatusCode) res.status) ? return_data : "Failed";
+        auto return_message = HTTP::IsSuccess(static_cast<HTTP::StatusCode>(res.status)) ? return_data : "Failed";
         res.set_content(return_message, HTTP::ContentType::TEXT_PLAIN_RESP_CONTENT);
     });
 
@@ -211,7 +211,7 @@ bool Server::Run(const String& host, const uint16_t port) {
         _session_mngr.CancelSessionTokenTimerOnce(req);
         String return_data;
         res.status = processRequest(session_token, HTTP::Method::POST, ConnectionManagement::URIRequestPath::Config::CANDIDATE_COMMIT_CANCEL, req.body, return_data);
-        auto return_message = HTTP::IsSuccess((HTTP::StatusCode) res.status) ? return_data : "Failed";
+        auto return_message = HTTP::IsSuccess(static_cast<HTTP::StatusCode>(res.status)) ? return_data : "Failed";
         res.set_content(return_message, HTTP::ContentType::TEXT_PLAIN_RESP_CONTENT);
     });
 
@@ -224,7 +224,7 @@ bool Server::Run(const String& host, const uint16_t port) {
         _session_mngr.CancelSessionTokenTimerOnce(req);
         String return_data;
         res.status = processRequest(session_token, HTTP::Method::DEL, ConnectionManagement::URIRequestPath::Config::CANDIDATE, req.body, return_data);
-        auto return_message = HTTP::IsSuccess((HTTP::StatusCode) res.status) ? return_data : "Failed";
+        auto return_message = HTTP::IsSuccess(static_cast<HTTP::StatusCode>(res.status)) ? return_data : "Failed";
         res.set_content(return_message, HTTP::ContentType::TEXT_PLAIN_RESP_CONTENT);
     });
 

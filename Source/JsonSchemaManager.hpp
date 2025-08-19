@@ -1,6 +1,6 @@
-//
-// Created by Pawel Maslanka on 6/15/25.
-//
+/** @copyright Copyright (C) 2025 Pawel Maslanka (pawmas@hotmail.com)
+ *  @license The GNU General Public License v3.0
+ */
 #pragma once
 
 #include "ISchemaManagement.hpp"

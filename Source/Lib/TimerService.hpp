@@ -13,7 +13,7 @@ public:
     using TimerId = uint64_t;
 
     TimerService() : mStop(false), mNextId(1) {
-        mWorker = std::thread([this]() { run(); });
+        mWorker = std::thread([this]() { Run(); });
     }
 
     ~TimerService() {
@@ -39,7 +39,7 @@ public:
     }
 
     // Cancel a scheduled timer
-    void Cancel(TimerId id) {
+    void Cancel(const TimerId id) {
         std::lock_guard<std::mutex> lock(mLock);
         mActiveTimers.erase(id); // will be skipped when popped
         mCondVar.notify_all();
@@ -71,7 +71,7 @@ private:
         return id;
     }
 
-    void run() {
+    void Run() {
         std::unique_lock<std::mutex> lock(mLock);
 
         while (!mStop) {

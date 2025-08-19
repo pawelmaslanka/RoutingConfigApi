@@ -1,3 +1,6 @@
+/** @copyright Copyright (C) 2025 Pawel Maslanka (pawmas@hotmail.com)
+ *  @license The GNU General Public License v3.0
+ */
 #include "BirdConfigConverter.hpp"
 #include "BirdConfigExecutor.hpp"
 #include "ConnectionManagement.hpp"
@@ -398,7 +401,6 @@ int main(const int argc, const char* argv[]) {
     args::ArgumentParser argParser("Configuration Management System");
     args::HelpFlag help(argParser, "HELP", "Show this help menu", {'h', "help"});
     args::ValueFlag<Std::String> thisHostAddress(argParser, "ADDRESS", "The host binding address (hostname or IP address)", { 'a', "address" });
-    args::ValueFlag<Std::String> birdcExecPath(argParser, "BIRDC", "Path to 'birdc' executable program for validation and load config purpose", { 'b', "birdc" });
     args::ValueFlag<Std::String> configFilename(argParser, "CONFIG", "The configuration file", { 'c', "config" });
     args::ValueFlag<Std::String> execPath(argParser, "EXEC", "Path to the executable program to verify and load the config", { 'e', "exec" });
     args::ValueFlag<Std::String> schemaRootFilename(argParser, "SCHEMA", "The schema file", { 's', "schema" });
@@ -493,9 +495,9 @@ int main(const int argc, const char* argv[]) {
 
     Std::SharedPtr<Storage::IDataStorage> birdConfigFileStorage;
     Std::SharedPtr<Config::Executing::IConfigExecuting> birdConfigExecutor;
-    if (birdcExecPath && targetConfigFilename) {
+    if (execPath && targetConfigFilename) {
         birdConfigFileStorage = std::make_shared<Storage::FileStorage>(args::get(targetConfigFilename), moduleRegistry);
-        birdConfigExecutor = std::make_shared<Config::Executing::BirdConfigExecutor>(birdConfigFileStorage, args::get(birdcExecPath), moduleRegistry);
+        birdConfigExecutor = std::make_shared<Config::Executing::BirdConfigExecutor>(birdConfigFileStorage, args::get(execPath), moduleRegistry);
         
         auto birdConfigData = birdConfigConverter->Convert(startupConfigDataToValid.value());
         if (!birdConfigData.has_value()) {

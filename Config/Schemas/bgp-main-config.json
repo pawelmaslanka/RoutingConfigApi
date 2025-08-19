@@ -274,10 +274,6 @@
                 "^term-[0-9]+$": {
                   "type": "object",
                   "properties": {
-                    "seq": {
-                      "type": "integer",
-                      "minimum": 1
-                    },
                     "if-match": {
                       "$ref": "#/$defs/if-match-body"
                     },

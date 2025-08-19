@@ -1,7 +1,6 @@
 /** @copyright Copyright (C) 2025 Pawel Maslanka (pawmas@hotmail.com)
  *  @license The GNU General Public License v3.0
  */
-
 #pragma once
 
 // Headers arranged in alphabetical order
