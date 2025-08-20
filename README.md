@@ -48,7 +48,7 @@ For more details, see the **IConfigExecuting** interface declared in the __Sourc
 
     1.1. Build the project
 
-    Please run the __run.sh__ script.
+    Please run the __Run.sh__ script.
 
     1.2. Run the service
 
@@ -83,7 +83,7 @@ For more details, see the **IConfigExecuting** interface declared in the __Sourc
 
     1.3. Run basic test
 
-    To quickly check capabilities of the program, please run the program and execute the __sample_request.sh__ script.
+    To quickly check capabilities of the program, please run the program and execute the __Source/Demo/ServiceTest.sh__ script.
     
 2. Log messages
 
@@ -267,8 +267,8 @@ For more details, see the **IConfigExecuting** interface declared in the __Sourc
     ```
 
 ### Run a sample test
-1. Build and run the service by executing the __run.sh__ script.
-2. In another console window run the sample test by executing the __sample_request.sh__ script. The script will perform all the operations described in the previous section.
+1. Build and run the service by executing the __Run.sh__ script.
+2. In another console window run the sample test by executing the __Source/Demo/ServiceTest.sh__ script. The script will perform all the operations described in the previous section.
 
 ### Understand configuration model constructs
 1. Pre-defined sets
@@ -554,3 +554,30 @@ The following external libraries have to be installed (provided) manually:
 * [json](https://github.com/nlohmann/json) - JSON for Modern C++
 * [json-schema-validator](https://github.com/pboettch/json-schema-validator) - JSON schema validator for JSON for Modern C++
 * [spdlog](https://github.com/gabime/spdlog) - Fast C++ logging library
+
+## Misc
+
+- JSON Schema Validator
+
+    You can validate your JSON schema in the online service [json-schema-validator](https://www.jsonschemavalidator.net)
+
+    ![JSON SChema Validator](./Docs/Images/OnlineJsonSchemaValidator.png)
+
+- JSON Diff
+
+    You can preview changes in JSON files in the online service [json-diff](https://json-diff.com)
+
+    ![JSON Diff](./Docs/Images/OnlineJsonDiff.png)
+
+- JSON Form Editor
+
+    Based on the JSON Schema data and JSON configuration data, a form editor can be generated in the online service [json-editor](https://json-editor.github.io/json-editor)
+
+    ![JSON Form Editor](./Docs/Images/OnlineJsonFormEditor.png)
+    ![JSON Sschema Form Editor](./Docs/Images/OnlineJsonFormEditorSchema.png)
+
+- JSON to YAML
+
+    You can convert your JSON data into YAML format in the online service [json-to-yaml](https://jsonformatter.org/json-to-yaml)
+
+    ![JSON to YAML](./Docs/Images/OnlineJsonToYamlConverter.png)
