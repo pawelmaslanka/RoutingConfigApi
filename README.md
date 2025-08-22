@@ -43,7 +43,12 @@ There is provided abstraction layer that allows for implement agent responsible 
 For more details, see the **IConfigExecuting** interface declared in the __Source/IConfigExecuting.hpp__ file. The reference implementation of this interface can be found in the __Source/BirdConfigExecutor.hpp__. It manages the **BIRD** daemon configuration file.
 
 ## How to?
-### Step-by-step session management
+### User Service use case
+Here is a typical user usage scenario:
+
+![User Session Sequence Diagram](./Docs/Images/UserSessionSequenceDiagram.png)
+
+#### Step-by-step session on config management
 1. Run program
 
     1.1. Build the project
