@@ -46,7 +46,7 @@ For more details, see the **IConfigExecuting** interface declared in the __Sourc
 ### User Service use case
 Here is a typical user usage scenario:
 
-![User Session Sequence Diagram](./Docs/Images/UserSessionSequenceDiagram.png)
+![User Session Sequence Diagram](./Docs/Images/UserSessionSeqDiag.png)
 
 #### Step-by-step session on config management
 1. Run program
@@ -142,6 +142,10 @@ Here is a typical user usage scenario:
     ]
     ```
 
+    For more implementation details, see the sequence diagram below.
+
+    ![Get Running Diff Squence Diagram](./Docs/Images/GetRunningDiffSeqDiag.png)
+
     4.2. If everything looks good then you can create your own session token to continue operations on the remote configuration instance:
 
     ```bash
@@ -175,6 +179,10 @@ Here is a typical user usage scenario:
         }
       ]'
     ```
+
+    For more implementation details, see the sequence diagram below.
+
+    ![Create Candidate Config Squence Diagram](./Docs/Images/CreateCandidateConfigSeqDiag.png)
 
     4.4. You can get the candidate configuration with the requested changes:
     ```bash
@@ -210,6 +218,10 @@ Here is a typical user usage scenario:
       -H "Authorization: Bearer ${SESSION_TOKEN}" \
       -d ''
     ```
+
+    For more implementation details, see the sequence diagram below.
+
+    ![Apply Candidate Config Squence Diagram](./Docs/Images/ApplyCandidateConfigSeqDiag.png)
 
     5.B. Commit-confirm
 
